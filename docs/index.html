@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>마계전기 디스가이아 2 PORTABLE 한국어화</title>
+  <meta name="description" content="PSP 마계전기 디스가이아 2 PORTABLE (ULJS00183) 한국어화 패치 문서" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌑</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+  <style>
+    /* ================================================================
+       팔레트 — 디스가이아 2 PORTABLE 타이틀 화면에서 추출
+       마계의 밤 자보라 배경 / 붉은 달 / 자홍 로고 / 프리니 금색
+       ================================================================ */
+    :root {
+      --bg:        #1A0E22;  /* Netherworld Night — 마계의 밤 */
+      --bg-deep:   #120818;  /* 코드 블록 등 더 어두운 면 */
+      --surface:   #2B1436;  /* Twilight Plum — 표면 */
+      --surface-2: #3A1B48;  /* 표면 강조 */
+      --primary:   #E0509A;  /* Disgaea Magenta — 주조색(로고) */
+      --primary-d: #B93A79;  /* 호버 */
+      --accent:    #F0C05A;  /* Prinny Gold — 강조(한 곳만) */
+      --accent-d:  #D19A2E;
+      --neutral:   #C9B2D6;  /* Amethyst Silver */
+      --text:      #FBF4FF;  /* Moonlit White */
+      --text-dim:  #B49BC2;
+      --line:      #452554;
+      --theme-color: #E0509A;
+    }
+
+    * { -webkit-font-smoothing: antialiased; }
+
+    html, body { background: var(--bg); }
+    body {
+      font-family: 'Noto Sans KR', -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+      color: var(--text);
+    }
+
+    /* 붉은 달과 마계의 기운이 도는 배경 */
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(760px 460px at 82% 6%, rgba(214, 72, 90, .20), transparent 62%),
+        radial-gradient(820px 500px at 10% 94%, rgba(224, 80, 154, .10), transparent 62%),
+        var(--bg);
+    }
+
+    /* ---- 본문 ---- */
+    .markdown-section { max-width: 880px; color: var(--text); }
+    .markdown-section h1 { font-weight: 900; letter-spacing: -0.02em; color: var(--text); }
+    .markdown-section h2 {
+      font-weight: 700; color: var(--text);
+      border-bottom: 2px solid var(--line);
+      padding-bottom: .35em; margin-top: 2.6rem; letter-spacing: -0.01em;
+    }
+    .markdown-section h3 { font-weight: 700; color: var(--neutral); margin-top: 2rem; }
+    .markdown-section h4 { color: var(--text-dim); }
+    .markdown-section p, .markdown-section li { color: var(--text); line-height: 1.75; }
+    .markdown-section strong { color: #fff; font-weight: 700; }
+    .markdown-section a { color: var(--primary); text-decoration: none; }
+    .markdown-section a:hover { color: var(--primary-d); text-decoration: underline; }
+    .markdown-section hr { border-color: var(--line); }
+
+    /* ---- 표 ---- */
+    .markdown-section table {
+      display: table; width: 100%; border-collapse: collapse;
+      border: 1px solid var(--line); margin: 1.2rem 0;
+    }
+    .markdown-section th {
+      background: var(--surface-2); color: var(--text);
+      border: 1px solid var(--line); font-weight: 700;
+    }
+    .markdown-section td { border: 1px solid var(--line); color: var(--text); }
+    .markdown-section tr { background: transparent; }
+    .markdown-section tr:nth-child(2n) { background: rgba(255,255,255,.025); }
+
+    /* ---- 코드 ---- */
+    .markdown-section code {
+      background: var(--surface); color: var(--accent);
+      border: 1px solid var(--line); border-radius: 4px;
+      font-size: .88em; padding: .12em .4em;
+    }
+    .markdown-section pre { background: var(--bg-deep); border: 1px solid var(--line); border-radius: 8px; }
+    .markdown-section pre > code { background: transparent; border: 0; color: var(--text); }
+    .markdown-section blockquote {
+      border-left: 4px solid var(--primary);
+      background: rgba(224, 80, 154, .07);
+      color: var(--text); border-radius: 0 6px 6px 0;
+    }
+    .markdown-section blockquote > p { color: var(--text); }
+
+    /* ---- 사이드바 ---- */
+    .sidebar { background: var(--bg-deep); border-right: 1px solid var(--line); }
+    .sidebar > h1 a { color: var(--text); font-weight: 900; }
+    .sidebar ul li a { color: var(--text-dim); border-bottom: 0; font-weight: 500; }
+    .sidebar ul li a:hover { color: var(--primary); }
+    .sidebar ul li.active > a,
+    .sidebar ul li > a.active {
+      color: var(--primary); font-weight: 700;
+      border-right: 3px solid var(--primary);
+    }
+    .sidebar ul li strong { color: var(--neutral); }
+    .sidebar-toggle { background-color: transparent; }
+    .sidebar-toggle span { background-color: var(--primary); }
+
+    /* ---- 검색 ---- */
+    .search input {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--line); border-radius: 6px;
+    }
+    .search input::placeholder { color: var(--text-dim); }
+    .search .results-panel { background: var(--bg-deep); }
+    .search p, .search h2 { color: var(--text) !important; }
+    .search .matching-post { border-bottom: 1px solid var(--line); }
+    .search .matching-post a { color: var(--primary); }
+    .search .clear-button { color: var(--text-dim); }
+
+    /* ---- 페이지네이션 ---- */
+    .pagination-item-label, .pagination-item-title { color: var(--text-dim); }
+    .pagination-item-title { color: var(--primary) !important; }
+    .docsify-pagination-container { border-top: 1px solid var(--line); }
+
+    /* ---- 코드 복사 버튼 ---- */
+    .docsify-copy-code-button {
+      background: var(--surface) !important; color: var(--text) !important;
+      border: 1px solid var(--line);
+    }
+
+    /* 강조 배너 — 금색은 여기 하나에만 */
+    .hero-note {
+      border: 1px solid var(--accent);
+      background: linear-gradient(180deg, rgba(240,192,90,.14), rgba(240,192,90,.05));
+      border-radius: 8px; padding: 1rem 1.2rem; margin: 1.4rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">불러오는 중…</div>
+  <script>
+    window.$docsify = {
+      name: '🌑 디스가이아 2P<br><small style="font-weight:400;opacity:.7">한국어화</small>',
+      repo: 'https://github.com/kimjh-eclipse/disgaea2-psp-korean',
+      homepage: 'home.md',
+      loadSidebar: true,
+      loadNavbar: false,
+      coverpage: false,
+      auto2top: true,
+      maxLevel: 3,
+      subMaxLevel: 3,
+      relativePath: true,
+      notFoundPage: true,
+      search: {
+        placeholder: '문서 검색…',
+        noData: '검색 결과가 없습니다.',
+        depth: 4
+      },
+      pagination: {
+        previousText: '이전',
+        nextText: '다음',
+        crossChapter: true
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2/dist/docsify-pagination.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-powershell.min.js"></script>
+</body>
+</html>

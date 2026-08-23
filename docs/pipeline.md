@@ -1,8 +1,3 @@
----
-title: 빌드
-nav_order: 5
----
-
 # 빌드 파이프라인
 
 일본판 원본 ISO를 상위 폴더에 두고 **순서대로** 실행합니다.
@@ -38,7 +33,6 @@ python tools/verify_iso.py           # 정적 검증
 - `krtext.validate` — 인코딩 불가 문자와 **글리프가 비어 있는 ASCII** 거부
 - `bake_font` — `work/tr_*.py` 전부를 읽어 사용 음절을 강제 포함(self-healing)
 
-{: .note }
 > `bake_font` 의 음절 수집은 패턴을 열거하지 않고 `work/tr_*.py` 전부를 읽습니다.
 > 열거 방식이었을 때 새 파일 계열(`tr_char` `tr_iptxt` `tr_rec`)이 추가될 때마다
 > 누락 사고가 났습니다.

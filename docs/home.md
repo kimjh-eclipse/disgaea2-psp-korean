@@ -1,14 +1,26 @@
----
-title: 개요
-nav_order: 1
----
-
 # 디스가이아 2P 한국어화
+
+> **📦 v20260823 내려받기: [Disgaea2Portable_Korean_v20260823.zip](https://github.com/kimjh-eclipse/disgaea2-psp-korean/releases/download/v20260823/Disgaea2Portable_Korean_v20260823.zip)**
+> — ISO 빠른패처 + xdelta 패치 + 검증 해시 동봉. 원본 게임 데이터는 포함되지 않습니다.
+>
+> 최신판은 [Releases](https://github.com/kimjh-eclipse/disgaea2-psp-korean/releases/latest) 에서 받으세요.
+>
+> **💾 저장소: [disgaea2-psp-korean](https://github.com/kimjh-eclipse/disgaea2-psp-korean)**
+
+받으신 파일이 배포본과 같은지 확인하실 수 있습니다.
+
+```
+Disgaea2Portable_Korean_v20260823.zip   8,032,051 바이트
+SHA-256: F9D388EBF4B121FF152F56F0924E4520F7EB9FD41CEA596D22F9F9C731AD0F9C
+```
+
+```powershell
+Get-FileHash .\Disgaea2Portable_Korean_v20260823.zip -Algorithm SHA256
+```
 
 PSP판 『魔界戦記ディスガイア2 PORTABLE』(일본판 `ULJS00183`) 한국어화 프로젝트입니다.
 번역 결과물과 함께 **포맷 규명 과정·겪은 함정**을 기록으로 남겼습니다.
 
-{: .warning }
 > **PPSSPP 전용입니다.**
 > 게임 실행 파일(EBOOT)을 평문 ELF로 교체하는 방식이라, 실기(PSP 개조본)의 서명 검사를
 > 통과하지 못합니다. 이것은 설정 문제가 아니라 구조적 제약입니다.
@@ -30,12 +42,12 @@ PSP판 『魔界戦記ディスガイア2 PORTABLE』(일본판 `ULJS00183`) 한
 
 ## 문서 구성
 
-- [설치](install/) — 패처 사용법
-- [렌더러 제약](renderer/) — 이 프로젝트에서 가장 어려웠던 부분
-- [포맷](formats/) — 규명한 파일 구조
-- [빌드](pipeline/) — 파이프라인 8단계
-- [번역 규칙](translation/) — 용어집과 표기 원칙
-- [문제 해결](troubleshooting/)
+- [설치](install.md) — 패처 사용법
+- [렌더러 제약](renderer.md) — 이 프로젝트에서 가장 어려웠던 부분
+- [포맷](formats.md) — 규명한 파일 구조
+- [빌드](pipeline.md) — 파이프라인 8단계
+- [번역 규칙](translation.md) — 용어집과 표기 원칙
+- [문제 해결](troubleshooting.md)
 
 ## 저장소에 게임 데이터는 없습니다
 
