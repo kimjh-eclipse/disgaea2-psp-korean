@@ -114,11 +114,15 @@ def main(make_iso=False):
             ko=RT.get(jp)
             if ko is None: miss.add(jp); continue
             b=krtext.encode(ko)
-            if len(b)+1>w: over.append((jp,ko,len(b),w-1)); continue
+            # ★ 예산은 선언 폭이 아니라 **레코드별 실제 용량**이다.
+            #   문자열 뒤가 바이너리인 필드가 있어서(HABIT/dungeon/mitem) 폭을
+            #   그대로 쓰면 무기 종류·사거리를 덮어쓴다. recdat.capacity 주석 참고.
+            cap=recdat.capacity(nm,data,i,off)
+            if len(b)>cap: over.append((jp,ko,len(b),cap)); continue
             edits[(i,off)]=b
         if over:
             print(f'!! {nm} 예산 초과 {len(over)}건')
-            for a,b,c,d in over[:8]: print(f'   {a} -> {b} ({c}B > {d}B)')
+            for a,b,c,d in over[:40]: print(f'   {a} -> {b} ({c}B > {d}B)')
             raise SystemExit(1)
         new=recdat.put(nm,data,edits)
         assert len(new)==len(data), f'{nm} 크기 변경'

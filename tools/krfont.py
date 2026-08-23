@@ -254,6 +254,9 @@ def build_tables(map_src, fnt_src, chars, moves=(), ascii_fix=()):
 #   대상: 대사에서 실제로 쓰는 전각 기호 + 전각 영숫자.
 REBAKE_SYMS = '？！：；，．（）－／～'
 
+# 잉크를 셀 왼쪽(x=1)에 붙일 기호 — 자간 7px 대상과 짝을 맞춘다.
+LEFT_ALIGN_SYMS = '，．'
+
 
 def rebake_cell(pages, ch, gid, font, halfwidth=False):
     """gid 셀을 우리 서체로 다시 그린다 (기존 픽셀은 지운다)
@@ -278,8 +281,12 @@ def rebake_cell(pages, ch, gid, font, halfwidth=False):
         return False
     x0, y0, x1, y1 = ink
     iw, ih = x1 - x0, y1 - y0
-    # 가로: 셀(또는 반각 박스) 중앙
-    tx = (box - iw) // 2
+    # 가로: 기본은 셀(또는 반각 박스) 중앙. 단 쉼표·마침표는 **왼쪽에 붙인다**.
+    # ★ 두 가지 이유 (HANDOFF §32-6)
+    #   1) 자간을 7px 로 줄였으므로 잉크가 셀 중앙(x=6)에 있으면 다음 글자와 겹친다.
+    #   2) 중앙 배치 자체가 결함이었다 — `금지．` 가 `금지 .` 처럼 앞이 벌어져 보였다.
+    #   원본 `、。`(0x8141/0x8142)는 이미 잉크가 x=0..4 라 손댈 필요가 없다.
+    tx = 1 if ch in LEFT_ALIGN_SYMS else (box - iw) // 2
     # 세로: 위 규칙
     if ch in '，．、。・':
         ty = 12 - ih

@@ -16,12 +16,22 @@ import struct
 
 # 파일 -> (헤더크기, 레코드크기, [(필드오프셋, 필드폭), ...])
 # 바이너리 필드는 제외하고 실제 텍스트 필드만 등록한다.
+#
+# ★★ 폭을 넉넉하게 잡으면 안 된다 — 문자열 뒤가 바이너리인 필드가 있다.
+#   레코드 크기까지 폭을 늘려 잡았다가 **아이템 DB 의 무기 종류·사거리·공격력을
+#   전부 0 으로 지웠다.** 인게임 증상: 무기를 껴도 `공격` 이 동작하지 않음(사용자 제보).
+#     HABIT.dat   +0x15  87 -> 57   (344 레코드 x 30B 소실)
+#     dungeon.dat +0x00  64 -> 32   (119 레코드 x 32B 소실)
+#     mitem.dat   +0x20  72 -> 64   ( 77 레코드 x  8B 소실)
+#   산출 근거: 원본에서 (문자열 최대길이+1) <= (NUL 뒤 첫 0 아닌 바이트의 최소 위치).
+#   폭 정정과 별개로 put() 이 꼬리를 아예 건드리지 않게 고쳤다(이중 안전장치).
+#   검사 도구: tools/check_recdat.py
 SPEC = {
-    'HABIT.dat':    (8,  120, [(0x00, 21), (0x15, 87)]),
-    'dungeon.dat':  (8,   64, [(0x00, 64)]),
+    'HABIT.dat':    (8,  120, [(0x00, 21), (0x15, 57)]),
+    'dungeon.dat':  (8,   64, [(0x00, 32)]),
     'charhelp.dat': (8,   80, [(0x00, 22)]),
     'magic.dat':    (8,  152, [(0x00, 50), (0x32, 50), (0x64, 50)]),
-    'mitem.dat':    (16, 104, [(0x08, 24), (0x20, 72)]),
+    'mitem.dat':    (16, 104, [(0x08, 24), (0x20, 64)]),
     'music.dat':    (8,  140, [(0x28, 47), (0x57, 53)]),
 }
 
@@ -51,15 +61,39 @@ def items(name, data):
     return out
 
 
-def put(name, data, edits):
-    """edits: {(rec_index, field_offset): new_bytes}. 폭 초과는 예외."""
+def capacity(name, data, i, off):
+    """레코드 i / 필드 off 에 실제로 쓸 수 있는 바이트 수 (종단 NUL 제외).
+
+    선언 폭을 그대로 믿지 않는다. **원본 문자열의 NUL 뒤에 0 아닌 바이트가 있으면
+    그 앞까지만** 쓸 수 있다 — 그 뒤는 바이너리 데이터다(무기 종류·사거리 등).
+    이 검사가 없어서 아이템 DB 를 통째로 망가뜨린 적이 있다(SPEC 주석 참고).
+    """
     hdr, rs, fields = SPEC[name]
-    width = {off: w for off, w in fields}
+    w = {o: ww for o, ww in fields}[off]
+    b = hdr + i * rs + off
+    f = data[b:b + w]
+    e = f.find(0)
+    if e < 0:
+        return w                     # 종단 없음 = 폭을 꽉 쓰는 문자열
+    for j in range(e + 1, w):
+        if f[j]:
+            return j - 1             # 꼬리 데이터 앞까지 (NUL 자리 확보)
+    return w - 1
+
+
+def put(name, data, edits):
+    """edits: {(rec_index, field_offset): new_bytes}. 용량 초과는 예외.
+
+    ★ 문자열 + 종단 NUL 만 쓰고 **그 뒤는 원본 그대로 남긴다.**
+      예전에는 필드 폭 전체를 NUL 로 채워 뒤따르는 바이너리를 지웠다.
+      게임은 NUL 까지만 읽으므로 남은 잉여 바이트는 무해하다.
+    """
+    hdr, rs, fields = SPEC[name]
     out = bytearray(data)
     for (i, off), new in edits.items():
-        w = width[off]
-        if len(new) + 1 > w:
-            raise ValueError(f'{name} rec{i} +{off:#x}: {len(new)}B > 가용 {w-1}B')
+        cap = capacity(name, data, i, off)
+        if len(new) > cap:
+            raise ValueError(f'{name} rec{i} +{off:#x}: {len(new)}B > 가용 {cap}B')
         b = hdr + i * rs + off
-        out[b:b + w] = new + b'\0' * (w - len(new))
+        out[b:b + len(new) + 1] = new + b'\0'
     return bytes(out)

@@ -164,6 +164,27 @@ def main():
             i += 2 if (0x81 <= b <= 0x9f or 0xe0 <= b <= 0xfc) else 1
         return False
 
+    # ★ 문자열 영역 **밖**의 무손상 검사 — 한글 표시가 정상이어도 여기가 깨질 수 있다.
+    #   실제로 선언 폭을 넉넉히 잡아 아이템 DB 의 무기 종류·사거리를 전부 0 으로
+    #   지운 채 배포했고, 증상은 "무기를 껴도 공격이 안 된다" 였다.
+    for nm in recdat.SPEC:
+        hdr, rs, flds = recdat.SPEC[nm]
+        o = open('jp/start/' + nm, 'rb').read()
+        b = mem[nm]
+        cnt = recdat.count(o)
+        touched = bytearray(len(o))
+        for i in range(cnt):
+            for off, w in flds:
+                cap = recdat.capacity(nm, o, i, off)
+                base = hdr + i * rs + off
+                for k in range(base, base + cap + 1):
+                    touched[k] = 1
+        hurt = sum(1 for k in range(min(len(o), len(b)))
+                   if o[k] != b[k] and not touched[k])
+        if hurt or len(o) != len(b):
+            print(f'  !! {nm}: 문자열 영역 밖 {hurt}바이트 손상 (바이너리 필드 파괴)')
+            ok = False
+
     for nm in recdat.SPEC:
         it = recdat.items(nm, mem[nm])
         kor = [raw for *_, raw in it
