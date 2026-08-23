@@ -1887,3 +1887,50 @@ sha256 4B74130AC970B7215D6B3609BB826374D08FA20648A03E1E0C4FBB3C40877518
 원본 사본 왕복 검증에서 위 해시와 일치 확인.
 
 **주의** ISO 가 바뀌면 반드시 `build_range_pack.py` 재실행 + EXE 재컴파일 + 왕복 재검증.
+
+## 31. 릴리스 (v20260823)
+
+### 산출물
+```
+저장소   https://github.com/kimjh-eclipse/disgaea2-psp-korean
+릴리스   https://github.com/kimjh-eclipse/disgaea2-psp-korean/releases/tag/v20260823
+문서     https://kimjh-eclipse.github.io/disgaea2-psp-korean/
+
+배포 ZIP  Disgaea2Portable_Korean_v20260823.zip   6,002,982B
+          sha256 7401CDB109ED4D7F7F89B40AEA736EEC92141107B00F3475973CBAC95ED0DCAE
+          내용: D2_ISO_QuickPatch.exe + 읽어주세요.txt
+
+최종 ISO  854,360,064B
+          sha256 4B74130AC970B7215D6B3609BB826374D08FA20648A03E1E0C4FBB3C40877518
+원본 ISO  sha256 AFE3475C3754CF1FC4170798EE36213B4434D5C4C2E585B91E3917962A6DDC55
+```
+
+### 저장소에 올린 것 / 올리지 않은 것
+올린 것 100개 파일 / 1.9MB — `tools/*.py`(37), `work/tr_*.py`(56), `work/GLOSSARY.md`,
+`iso_quickpatch/*.py|*.cs`, `HANDOFF.md`, `README.md`, `docs/`(Pages 8페이지).
+
+**올리지 않은 것** — ISO, 추출 아카이브, 폰트·텍스처, 복호 EBOOT, RAM 덤프,
+패처 리소스(`D2_ISO_ranges.bin`)와 EXE, 인벤토리 TSV, `work/chunks/`.
+전부 게임 데이터이거나 원문 텍스트 덤프다. 패처 배포물은 Release 첨부로만 배포한다.
+
+{: 커밋 직전에 금지 확장자 검사를 넣어 확인했다. `.gitignore` 화이트리스트 방식이
+의도대로 동작하지 않았으므로(디렉터리 재포함 규칙 문제) **올릴 경로를 명시적으로 `git add`**
+하는 방식을 썼다. }
+
+### GitHub Pages
+`main` 브랜치 `/docs`, `remote_theme: just-the-docs/just-the-docs@v0.10.1`.
+페이지 URL 은 `/install` `/renderer` 형태(뒤에 슬래시를 붙이면 404).
+
+### Release 자산 파일명
+**GitHub 은 자산 파일명에서 비ASCII 를 제거한다.** 한글 파일명으로 올리면
+`디스가이아2_PORTABLE_한국어화_v20260823.zip` -> `2_PORTABLE_._v20260823.zip` 이 된다.
+ASCII 파일명(`Disgaea2Portable_Korean_v20260823.zip`)으로 올려야 한다.
+
+### 검증 경로
+ZIP 압축 해제 -> 원본 사본에 적용 -> 해시가 최종 ISO 와 일치 -> PPSSPP 부팅 확인.
+배포물 그 자체로 왕복 검증했다.
+
+### 로컬 정리
+11GB -> 2.8GB. 지운 것: 중간 시험 ISO 10개, US판 추출본(`ext/`), 루트 스크린샷·RAM 덤프,
+`ffmpeg` 압축, 다른 게임 ISO.
+**`jp/EBOOT_dec_clean.elf` 는 반드시 남긴다** — ISO 만으로 재생성 불가.
