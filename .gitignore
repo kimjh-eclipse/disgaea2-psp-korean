@@ -1,0 +1,33 @@
+# ══ 화이트리스트: 기본 전부 제외하고 소스만 허용 ══
+# 게임 데이터(ISO·추출 아카이브·EBOOT·폰트·텍스처)는 저작물이라 재배포할 수 없다.
+*
+!.gitignore
+!README.md
+!HANDOFF.md
+!LICENSE
+
+!tools/
+!tools/*.py
+
+!work/
+!work/tr_*.py
+!work/GLOSSARY.md
+
+# ISO 빠른패처 — 소스만. 리소스(.bin)와 빌드물(.exe)은 패치된 게임 데이터를
+# 담고 있으므로 커밋하지 않고 Release 첨부로만 배포한다.
+!iso_quickpatch/
+!iso_quickpatch/*.py
+!iso_quickpatch/*.cs
+
+# 어떤 경로에서도 금지
+*.iso
+*.bin
+*.dat
+*.elf
+*.txp
+*.ftd
+*.fnt
+*.exe
+*.png
+*.zip
+*.tsv
