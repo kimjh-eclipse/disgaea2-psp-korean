@@ -1,5 +1,5 @@
-title: 디스가이아 2 PORTABLE 한국어화
-description: PSP판 마계전기 디스가이아 2 PORTABLE(ULJS00183) 한국어화 기술 문서
+title: 디스가이아 2P 한국어화
+description: PSP판 마계전기 디스가이아 2 PORTABLE (ULJS00183) 한국어화 기술 문서
 remote_theme: just-the-docs/just-the-docs@v0.10.1
 plugins:
   - jekyll-remote-theme
