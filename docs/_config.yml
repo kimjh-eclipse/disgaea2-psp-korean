@@ -1,0 +1,24 @@
+title: 디스가이아 2 PORTABLE 한국어화
+description: PSP판 마계전기 디스가이아 2 PORTABLE(ULJS00183) 한국어화 기술 문서
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+color_scheme: dark
+search_enabled: true
+heading_anchors: true
+
+aux_links:
+  GitHub 저장소: https://github.com/kimjh-eclipse/disgaea2-psp-korean
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: 패치 내려받기 (Releases)
+    url: https://github.com/kimjh-eclipse/disgaea2-psp-korean/releases
+
+footer_content: 제작 이클립스 · 게임 데이터는 포함되어 있지 않습니다
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
