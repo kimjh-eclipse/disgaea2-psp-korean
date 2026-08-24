@@ -177,20 +177,35 @@ def main(make_iso=False):
                               open('build_jp/DUNGEON_root.DAT', 'rb').read())
         print(f"ISO 갱신: DUNGEON.DAT(스테이지·지명 165) {rd['size']:,}B")
 
-        # ★ 패치된 평문 ELF EBOOT 주입 — 이 레이아웃의 필수 전제.
-        #   build_jp/EBOOT_KR.BIN = PPSSPP DumpDecryptedEboots 산출물(ULJS00183_EBOOT.BIN)에
-        #   talk 버퍼 9워드(0x18F8->0x6000) 패치. 재생성: tools/patch_eboot_buffer.py
-        #   (원본 복호 ELF: jp/EBOOT_dec_clean.elf — ISO 만으로는 재생성 불가, 백업 유지)
+        # ★ 패치 EBOOT 주입 — 이 레이아웃의 필수 전제.
+        #   build_jp/EBOOT_KR.BIN = PPSSPP DumpDecryptedEboots 산출물에
+        #   talk 버퍼 9워드(0x18F8->0x6000) 등을 패치한 평문 ELF.
+        #
+        #   ★★ 예전에는 이 평문 ELF 를 그대로 넣어서 **PPSSPP 전용**이었다.
+        #   솔로니님이 주신 type-1(~PSP, tag C0CB167C) 재암호화 스크립트
+        #   (tools/psp_prx_type1.py)로 원본 헤더를 재사용해 다시 암호화하면
+        #   서명 검사를 통과하는 EBOOT 이 나온다.
+        #
+        #   PPSSPP 덤프는 진짜 원본 ELF 뒤에 348B 가 더 붙어 있다(덤프 아티팩트).
+        #   원본 복호 길이로 잘라 넣는다 — 검증: 원본복호 == PPSSPP덤프[:원본길이].
         ebp='build_jp/EBOOT_KR.BIN'
-        if os.path.exists(ebp):
-            eb=open(ebp,'rb').read()
-            assert eb[:4]==b'ELF', 'EBOOT_KR.BIN 이 ELF 가 아님'
-            r2=isopatch.replace(dst, 24, b'EBOOT.BIN', eb, slot_lba=32, slot_sectors=832-32)
-            assert r2['where']=='제자리'
-            print(f"ISO 갱신: EBOOT.BIN(평문 ELF+버퍼패치) {r2['size']:,}B")
-        else:
+        if not os.path.exists(ebp):
             print('!! EBOOT_KR.BIN 없음 — 이 레이아웃은 패치 EBOOT 필수. 빌드 중단')
             raise SystemExit(1)
+        eb=open(ebp,'rb').read()
+        assert eb[:4]==b'ELF', 'EBOOT_KR.BIN 이 ELF 가 아니다'
+        from psp_prx_type1 import encrypt_prx, decrypt_prx
+        orig_enc=open('jp/EBOOT_orig_enc.BIN','rb').read()
+        limit=len(decrypt_prx(orig_enc))
+        assert len(eb)>=limit, 'ELF 가 원본 한도보다 짧다'
+        cut=len(eb)-limit
+        enc=encrypt_prx(eb[:limit], orig_enc)
+        assert enc[:4]==b'~PSP', '재암호화 결과가 ~PSP 가 아니다'
+        assert decrypt_prx(enc)==eb[:limit], 'EBOOT 재암호화 왕복 검증 실패'
+        open('build_jp/EBOOT_KR_enc.BIN','wb').write(enc)
+        r2=isopatch.replace(dst, 24, b'EBOOT.BIN', enc, slot_lba=32, slot_sectors=832-32)
+        assert r2['where']=='제자리'
+        print(f"ISO 갱신: EBOOT.BIN(재암호화 ~PSP, 덤프꼬리 {cut}B 절단) {r2['size']:,}B")
     return raw
 
 if __name__=='__main__':

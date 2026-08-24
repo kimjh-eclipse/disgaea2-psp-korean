@@ -16,6 +16,7 @@ turning into black holes inside glyphs.
 """
 from pathlib import Path
 import argparse
+import os
 import shutil
 import struct
 import sys
@@ -31,8 +32,13 @@ from txp import swizzle
 
 
 SOURCE_IMAGE = ROOT / "work/opening_text_kr_imagegen.png"
-BASE_ISO = ROOT / "build_jp/D2_JP_KR_title.iso"
-OUTPUT_ISO = ROOT / "build_jp/D2_JP_KR_opening.iso"
+# ★ 예전에는 중간 ISO(D2_JP_KR_title.iso -> D2_JP_KR_opening.iso)를 따로 썼다.
+#   그래서 메인 빌드 체인(build_jp.py 이후)에 연결되지 않아, ISO 를 새로 만들면
+#   **오프닝 나레이션이 통째로 빠졌다**(v20260826 에서 실제로 누락됐다).
+#   지금은 다른 도구들과 같이 build_jp/D2_JP_KR.iso 를 제자리에서 고친다.
+_ISO = os.environ.get("D2_ISO_DST", "build_jp/D2_JP_KR.iso")
+BASE_ISO = ROOT / _ISO if not os.path.isabs(_ISO) else Path(_ISO)
+OUTPUT_ISO = BASE_ISO
 ANMPACK_LBA = 282896
 ANMPACK_SIZE = 68324111
 MEMBER = "anm7101.dat"
@@ -195,7 +201,8 @@ def build(make_iso):
     print("ANMPACK", len(rebuilt), "bytes (unchanged)")
 
     if make_iso:
-        shutil.copyfile(BASE_ISO, OUTPUT_ISO)
+        if OUTPUT_ISO != BASE_ISO:
+            shutil.copyfile(BASE_ISO, OUTPUT_ISO)
         with OUTPUT_ISO.open("r+b") as stream:
             stream.seek(ANMPACK_LBA * 2048)
             stream.write(rebuilt)

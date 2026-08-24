@@ -53,6 +53,7 @@ python tools/build_nameplate.py --iso  # name.txp 아틀라스
 python tools/build_title.py --iso    # 타이틀 로고 (nameplate 뒤에)
 python tools/build_names.py --iso    # 루트 NAME.DAT
 python tools/build_vmnames.py --iso  # 유닛 이름 풀 (실제 사용처)
+python tools/build_opening_text.py --iso  # 오프닝 나레이션 (ANMPACK/anm7101)
 python tools/verify_iso.py           # 정적 검증
 ```
 
