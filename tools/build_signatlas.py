@@ -19,8 +19,9 @@
       y  32..223  지명 12줄 x 2열   ← 여기만 다시 그린다 (줄당 16px, 열당 128px)
       y 256..511  캐릭터 스프라이트  ← 건드리지 않는다 (anm8265.dat 과 공유)
 
-팔레트는 스프라이트와 공용인 256색이라 원본 글자는 색 프린징이 있다. 색을 흉내내는
-대신 **그 열에서 가장 많이 쓰인 인덱스**를 본체·외곽으로 뽑아 재현한다.
+새 글자는 index 0xF0 하나로 이진화한다. 0xFF를 쓰면 상·하 니블에 대응하는
+두 합성 층이 모두 켜지고, 0x0F는 반투명 점무늬 층이다. 0xF0은 반대쪽
+불투명 검정 층만 켠다.
 
 사용:
     python tools/build_signatlas.py            # build_jp/ANMPACK.DAT 갱신 + 미리보기
@@ -30,7 +31,6 @@ import io
 import os
 import struct
 import sys
-from collections import Counter
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +48,7 @@ PAL_OFF, TEX_OFF = 0x10C0, 0x14C0
 W, H = 256, 512
 ROW_Y0, ROWS, ROW_H = 32, 12, 16
 COL_W = 128
-FONT_PATH, FONT_INDEX, FONT_SIZE = r'C:\Windows\Fonts\gulim.ttc', 2, 12   # 본문과 같은 돋움
+FONT_PATH, FONT_INDEX, FONT_SIZE = r'C:\Windows\Fonts\gulim.ttc', 2, 12
 SPACE_PX = 4
 
 # 원문 12줄 (위→아래) 과 번역. 용어는 기존 코퍼스·script00 번역과 일치시킨다.
@@ -91,20 +91,6 @@ def load_member():
     raise SystemExit(f'{MEMBER} 없음')
 
 
-def column_ramp(idx, x0):
-    """그 열에서 많이 쓰인 인덱스 -> (본체, 외곽)"""
-    c = Counter()
-    for y in range(ROW_Y0, ROW_Y0 + ROWS * ROW_H):
-        for x in range(x0, x0 + COL_W):
-            v = idx[y * W + x]
-            if v:
-                c[v] += 1
-    top = [v for v, _ in c.most_common(4)]
-    core = top[0]
-    edge = top[1] if len(top) > 1 else top[0]
-    return core, edge
-
-
 def row_ink_y(idx, x0, row):
     """원본 글자의 세로 잉크 범위 — 새 글자도 여기에 맞춘다"""
     y0 = ROW_Y0 + row * ROW_H
@@ -126,50 +112,64 @@ def render_text(text, font):
         d.text((x, pad), ch, 255, font=font)
         x += font.getlength(ch)
     box = im.getbbox()
-    return (im, box) if box else (None, None)
+    if not box:
+        return None, None
+    return im, box
 
 
 def main(make_iso=False):
     ents, ent, ref = load_member()
     d = bytearray(ent['data'])
-    # 원본(REF)에서 측정하고, 원본 픽셀을 출발점으로 다시 그린다 -> 몇 번 돌려도 같은 결과
-    orig = bytes(unswizzle(bytes(ref[TEX_OFF:TEX_OFF + W * H]), W, H))
+    # 원본(REF)에서 측정하고, 원본 픽셀을 출발점으로 다시 그린다 -> 몇 번 돌려도 같은 결과.
+    tex_size = W * H
+    orig = bytes(unswizzle(bytes(ref[TEX_OFF:TEX_OFF + tex_size]), W, H))
     idx = bytearray(orig)
 
     font = ImageFont.truetype(FONT_PATH, FONT_SIZE, index=FONT_INDEX)
-    for ci, x0 in enumerate((0, COL_W)):
-        core, edge = column_ramp(orig, x0)
-        print(f'  {"좌" if ci == 0 else "우"}열: 본체 idx {core}, 외곽 idx {edge}')
+    # 게임이 좌·우 두 상태를 같은 간판에 위아래로 합성한다. 두 열 모두에
+    # 완성 글자를 넣으면 지명이 두 겹으로 나온다. 우열은 비우고 좌열만 쓴다.
+    for y in range(ROW_Y0, ROW_Y0 + ROWS * ROW_H):
+        for x in range(COL_W, W):
+            idx[y * W + x] = 0
+
+    for x0 in (0,):
         for row, (jp, ko) in enumerate(NAMES):
-            iy0, iy1 = row_ink_y(orig, x0, row)
-            # 원본 글자 지우기 (그 행·그 열만)
-            for y in range(ROW_Y0 + row * ROW_H, ROW_Y0 + (row + 1) * ROW_H):
+            row_top = ROW_Y0 + row * ROW_H
+            row_bottom = row_top + ROW_H
+            for y in range(row_top, row_bottom):
                 for x in range(x0, x0 + COL_W):
                     idx[y * W + x] = 0
+
             im, box = render_text(ko, font)
             if im is None:
                 continue
             gw, gh = box[2] - box[0], box[3] - box[1]
             if gw > COL_W:
                 raise SystemExit(f'행 {row} `{ko}` 폭 {gw}px > {COL_W}px')
-            dx = x0 + (COL_W - gw) // 2
-            dy = iy0 + ((iy1 - iy0 + 1) - gh) // 2
+
+            iy0, iy1 = row_ink_y(orig, x0, row)
+            base_x = x0 + (COL_W - gw) // 2
+            base_y = iy0 + ((iy1 - iy0 + 1) - gh) // 2
             for yy in range(gh):
                 for xx in range(gw):
                     v = im.getpixel((box[0] + xx, box[1] + yy))
-                    if v < 40:
+                    if v < 96:
                         continue
-                    ty, tx = dy + yy, dx + xx
-                    if not (ROW_Y0 <= ty < ROW_Y0 + ROWS * ROW_H and x0 <= tx < x0 + COL_W):
-                        continue
-                    idx[ty * W + tx] = core if v >= 140 else edge
+                    ty, tx = base_y + yy, base_x + xx
+                    if row_top <= ty < row_bottom and x0 <= tx < x0 + COL_W:
+                        # 8bit 색인의 하위 니블만 켠다. 0xFF는 두 합성 층이
+                        # 모두 불투명해 같은 글자가 위·아래로 두 번 나온다.
+                        idx[ty * W + tx] = 0xF0
 
     # 손대지 않아야 하는 영역 확인
     for y in list(range(0, ROW_Y0)) + list(range(ROW_Y0 + ROWS * ROW_H, H)):
         if idx[y * W:(y + 1) * W] != orig[y * W:(y + 1) * W]:
             raise SystemExit(f'보존 영역 y={y} 가 변경됐다')
 
-    d[TEX_OFF:TEX_OFF + W * H] = swizzle(bytes(idx), W, H)
+    encoded = swizzle(bytes(idx), W, H)
+    tail_before = bytes(d[TEX_OFF + tex_size:])
+    d[TEX_OFF:TEX_OFF + tex_size] = encoded
+    assert bytes(d[TEX_OFF + tex_size:]) == tail_before, '텍스처 뒤 데이터 변경'
     assert len(d) == len(ent['data']), '멤버 크기 변경'
     ent['data'] = bytes(d)
     packed = scriptpack.pack(ents)

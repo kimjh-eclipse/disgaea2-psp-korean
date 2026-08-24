@@ -22,7 +22,7 @@ using System.Windows.Forms;
 //   rangeCount x { u64 offset, u32 length, length bytes }
 internal static class D2IsoQuickPatch
 {
-    private const string VersionText = "v20260825";
+    private const string VersionText = "v20260826";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
     private const string PackMagic = "D2PSPRNG1";
     private const int FormatVersion = 1;

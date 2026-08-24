@@ -130,9 +130,10 @@ def main(make_iso=False):
         rec_names.append(nm)
         print(f'{nm:14s} {len(edits):5d}회 적용, 미번역 {len(miss)}종')
 
-    # 1-E) ISO 루트 DUNGEON.DAT (스테이지·지명 165개) — 지명 간판의 출처
-    #      START 안이 아니라 /PSP_GAME/USRDIR 에 있는 별도 파일이다.
-    #      번역은 전부 기존 코퍼스에 이미 있다(고유 97개, 예산 초과 0).
+    # 1-E) ISO 루트 DUNGEON.DAT (스테이지·지명 165개) — 스테이지 선택 화면 이름 목록.
+    #      ★ 거점 진입 시 나오는 지명 간판(이미지)의 출처가 아니다 — 그건 별개로
+    #      ANMPACK/anm7151.dat 아틀라스다(tools/build_signatlas.py, GE 디버거로 확인).
+    #      이 파일과는 무관하니 그대로 번역해 넣는다.
     import build_dungeon as _bd
     _bd.main(False)
 
@@ -169,8 +170,11 @@ def main(make_iso=False):
                            slot_lba=JP_ISO_LBA, slot_sectors=JP_ISO_NEXT-JP_ISO_LBA)
         assert r['where']=='제자리', f"슬롯 안에 들어가야 한다: {r['where']}"
         print(f"ISO 갱신: START_JP -> LBA {r['lba']}, {r['size']}B")
+        # ★ 'build_jp/DUNGEON.DAT' 로 쓰면 Windows 파일시스템이 대소문자를 구분하지
+        #   않아 START 멤버 'build_jp/dungeon.dat'(8,016B, 완전히 다른 파일)와
+        #   충돌한다. build_dungeon.py 가 이 충돌을 피해 DUNGEON_root.DAT 로 쓴다.
         rd = isopatch.replace(dst, 25, b'DUNGEON.DAT',
-                              open('build_jp/DUNGEON.DAT', 'rb').read())
+                              open('build_jp/DUNGEON_root.DAT', 'rb').read())
         print(f"ISO 갱신: DUNGEON.DAT(스테이지·지명 165) {rd['size']:,}B")
 
         # ★ 패치된 평문 ELF EBOOT 주입 — 이 레이아웃의 필수 전제.
