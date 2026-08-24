@@ -29,6 +29,14 @@ def replace(iso_path, dir_lba, name, data, slot_lba=None, slot_sectors=None):
     cur_lba = struct.unpack_from('<I', dirsec, rec + 2)[0]
     cur_size = struct.unpack_from('<I', dirsec, rec + 10)[0]
 
+    # ★ 슬롯을 안 넘겨도, 새 데이터가 **그 파일이 이미 차지한 섹터 범위** 안에
+    #   들어가면 제자리 교체한다. 예전에는 무조건 ISO 끝에 붙여서, 크기가 같은
+    #   파일을 넣었는데도 ISO 가 커졌다(DUNGEON.DAT 13,208B -> ISO +14,336B).
+    #   ISO 크기가 변하면 구간 패처(원본·패치본 크기 동일 전제)가 깨진다.
+    if slot_sectors is None:
+        own = (cur_size + SECTOR - 1) // SECTOR
+        if own and len(data) <= own * SECTOR:
+            slot_lba, slot_sectors = cur_lba, own
     slot = (slot_sectors * SECTOR) if slot_sectors else None
     if slot is not None and len(data) <= slot:
         # 제자리 교체

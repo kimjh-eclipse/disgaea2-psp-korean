@@ -130,6 +130,12 @@ def main(make_iso=False):
         rec_names.append(nm)
         print(f'{nm:14s} {len(edits):5d}회 적용, 미번역 {len(miss)}종')
 
+    # 1-E) ISO 루트 DUNGEON.DAT (스테이지·지명 165개) — 지명 간판의 출처
+    #      START 안이 아니라 /PSP_GAME/USRDIR 에 있는 별도 파일이다.
+    #      번역은 전부 기존 코퍼스에 이미 있다(고유 97개, 예산 초과 0).
+    import build_dungeon as _bd
+    _bd.main(False)
+
     # 2) START 재빌드
     ov={nm:open('build_jp/'+nm,'rb').read() for nm in
         ('fontB.ftd','FontB0000.txp','talk00.dat','fontB.fnt','script00.dat',
@@ -163,6 +169,10 @@ def main(make_iso=False):
                            slot_lba=JP_ISO_LBA, slot_sectors=JP_ISO_NEXT-JP_ISO_LBA)
         assert r['where']=='제자리', f"슬롯 안에 들어가야 한다: {r['where']}"
         print(f"ISO 갱신: START_JP -> LBA {r['lba']}, {r['size']}B")
+        rd = isopatch.replace(dst, 25, b'DUNGEON.DAT',
+                              open('build_jp/DUNGEON.DAT', 'rb').read())
+        print(f"ISO 갱신: DUNGEON.DAT(스테이지·지명 165) {rd['size']:,}B")
+
         # ★ 패치된 평문 ELF EBOOT 주입 — 이 레이아웃의 필수 전제.
         #   build_jp/EBOOT_KR.BIN = PPSSPP DumpDecryptedEboots 산출물(ULJS00183_EBOOT.BIN)에
         #   talk 버퍼 9워드(0x18F8->0x6000) 패치. 재생성: tools/patch_eboot_buffer.py

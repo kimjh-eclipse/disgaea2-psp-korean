@@ -139,7 +139,7 @@ def main():
     cd, clba, csize = read_iso_file(f, 25, b'CHAR.DAT')
     ccnt = struct.unpack_from('<I', cd, 0)[0]
     assert 8 + ccnt * 0x102 == len(cd), 'CHAR.DAT 구조 불일치'
-    expected_char = 'build_jp/CHAR.DAT'
+    expected_char = 'build_jp/CHAR_root.DAT'
     same_char = os.path.exists(expected_char) and cd == open(expected_char, 'rb').read()
     jp_mama = cd.count('ママ'.encode('cp932'))
     print(f'  CHAR.DAT(이름표) lba {clba} / {ccnt}레코드 / '

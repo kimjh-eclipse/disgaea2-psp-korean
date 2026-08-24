@@ -74,8 +74,8 @@ def main(make_iso=False):
         for s in list(missing)[:10]:
             print(f'   미번역: {s}')
     assert len(d) == len(open('jp/CHAR.DAT', 'rb').read()), '크기 변경됨'
-    open('build_jp/CHAR.DAT', 'wb').write(bytes(d))
-    print(f'build_jp/CHAR.DAT 저장 ({len(d)}B, 크기 동일)')
+    open('build_jp/CHAR_root.DAT', 'wb').write(bytes(d))
+    print(f'build_jp/CHAR_root.DAT 저장 ({len(d)}B, 크기 동일)')
 
     if make_iso:
         dst = os.environ.get('D2_ISO_DST', 'build_jp/D2_JP_KR.iso')

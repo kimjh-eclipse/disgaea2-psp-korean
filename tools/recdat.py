@@ -33,7 +33,28 @@ SPEC = {
     'magic.dat':    (8,  152, [(0x00, 50), (0x32, 50), (0x64, 50)]),
     'mitem.dat':    (16, 104, [(0x08, 24), (0x20, 64)]),
     'music.dat':    (8,  140, [(0x28, 47), (0x57, 53)]),
+    # 스킬 DB (372 x 112). +0x00 u16 스킬ID / +0x02 이름 / +0x19 설명
+    # ★ 설명 필드는 선언상 87 이 들어가지만(0x19+87=112 로 레코드를 꽉 채움)
+    #   **진짜 폭은 57** 이다. 그 뒤 30바이트가 위력·거리·범위·SP 파라미터다.
+    #   87 로 썼으면 372개 스킬 전부를 또 망가뜨렸다 (HABIT.dat 과 동일한 함정).
+    'char.dat':     (16, 112, [(0x02, 23), (0x19, 57)]),
 }
+
+
+# ISO 루트(/PSP_GAME/USRDIR) 에 있는 같은 형식의 파일. START 안이 아니라 별도로 읽는다.
+# ★ 지명 간판(`ホルルト村`)의 출처가 여기다. "이미지라서 못 찾았다"고 결론냈던 것은
+#   패치 대상 파일만 훑은 결과였다 — 전수 탐색(tools/find_string.py)으로 찾았다.
+#   레코드 +0x16 부터 u16 스테이지 ID 등 바이너리가 붙어 있으므로 폭은 22 를 넘기면 안 된다.
+ROOT_SPEC = {
+    'DUNGEON.DAT':  (8, 0x50, [(0x00, 22)]),
+}
+
+
+def spec(name):
+    """SPEC(START 내부) 과 ROOT_SPEC(ISO 루트) 를 함께 찾는다"""
+    if name in SPEC:
+        return SPEC[name]
+    return ROOT_SPEC[name]
 
 
 def count(data):
@@ -45,7 +66,7 @@ def count(data):
 
 def items(name, data):
     """[(rec_index, field_offset, width, raw_bytes)] — 비어있지 않은 필드만"""
-    hdr, rs, fields = SPEC[name]
+    hdr, rs, fields = spec(name)
     n = count(data)
     if hdr + n * rs > len(data):
         raise ValueError('레코드 영역이 파일보다 큼')
@@ -68,7 +89,7 @@ def capacity(name, data, i, off):
     그 앞까지만** 쓸 수 있다 — 그 뒤는 바이너리 데이터다(무기 종류·사거리 등).
     이 검사가 없어서 아이템 DB 를 통째로 망가뜨린 적이 있다(SPEC 주석 참고).
     """
-    hdr, rs, fields = SPEC[name]
+    hdr, rs, fields = spec(name)
     w = {o: ww for o, ww in fields}[off]
     b = hdr + i * rs + off
     f = data[b:b + w]
@@ -88,7 +109,7 @@ def put(name, data, edits):
       예전에는 필드 폭 전체를 NUL 로 채워 뒤따르는 바이너리를 지웠다.
       게임은 NUL 까지만 읽으므로 남은 잉여 바이트는 무해하다.
     """
-    hdr, rs, fields = SPEC[name]
+    hdr, rs, fields = spec(name)
     out = bytearray(data)
     for (i, off), new in edits.items():
         cap = capacity(name, data, i, off)
