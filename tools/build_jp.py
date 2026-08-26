@@ -182,7 +182,7 @@ def main(make_iso=False):
         #   talk 버퍼 9워드(0x18F8->0x6000) 등을 패치한 평문 ELF.
         #
         #   ★★ 예전에는 이 평문 ELF 를 그대로 넣어서 **PPSSPP 전용**이었다.
-        #   솔로니님이 주신 type-1(~PSP, tag C0CB167C) 재암호화 스크립트
+        #   시놀부님이 주신 type-1(~PSP, tag C0CB167C) 재암호화 스크립트
         #   (tools/psp_prx_type1.py)로 원본 헤더를 재사용해 다시 암호화하면
         #   서명 검사를 통과하는 EBOOT 이 나온다.
         #
