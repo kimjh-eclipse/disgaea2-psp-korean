@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""지명 간판 아틀라스 한글화 — ANMPACK/anm7151.dat 안의 256x512 8bpp 이미지.
+"""지명 간판 아틀라스 한글화 — ANMPACK/anm7151.dat 안의 256x512 CLUT4 이미지.
 
 ★ 이것이 거점 진입 시 나오는 지명 간판(`ホルルト村`)의 진짜 출처다.
 
@@ -13,15 +13,15 @@
 존재하지 않는다**. 개발 시점에 구워 넣은 이미지다.
 
 레이아웃 (anm7151.dat)
-    +0x10C0  256색 RGBA 팔레트 (1024B)
-    +0x14C0  256x512 8bpp PSP 스위즐 인덱스 (131072B)
-      y   0.. 25  상단 바 장식      ← 건드리지 않는다
-      y  32..223  지명 12줄 x 2열   ← 여기만 다시 그린다 (줄당 16px, 열당 128px)
-      y 256..511  캐릭터 스프라이트  ← 건드리지 않는다 (anm8265.dat 과 공유)
+    +0x10C0  RGBA 팔레트 (첫 16색이 간판용 알파 램프)
+    +0x14C0  256x512 CLUT4 간판 시트 (65536B, PSP swizzled)
+    +0x114C0 256x512 CLUT4 캐릭터 시트 (65536B) ← 절대 건드리지 않는다
+      y   0.. 31  상단 바 장식      ← 건드리지 않는다
+      y  64..447  지명 12줄         ← 여기만 다시 그린다 (줄당 32px)
 
-새 글자는 index 0xF0 하나로 이진화한다. 0xFF를 쓰면 상·하 니블에 대응하는
-두 합성 층이 모두 켜지고, 0x0F는 반투명 점무늬 층이다. 0xF0은 반대쪽
-불투명 검정 층만 켠다.
+중요: 뒤의 캐릭터 시트까지 합쳐 131072B를 8bpp 한 장으로 해석하면 글자가
+겹치거나 점선으로 갈라진다. PPSSPP 실제 텍스처 덤프(256x512)와 두 시트의
+독립 디코딩으로 규격을 확정했다. 팔레트 자체는 절대 변경하지 않는다.
 
 사용:
     python tools/build_signatlas.py            # build_jp/ANMPACK.DAT 갱신 + 미리보기
@@ -46,9 +46,10 @@ from txp import swizzle, unswizzle
 MEMBER = 'anm7151.dat'
 PAL_OFF, TEX_OFF = 0x10C0, 0x14C0
 W, H = 256, 512
-ROW_Y0, ROWS, ROW_H = 32, 12, 16
-COL_W = 128
-FONT_PATH, FONT_INDEX, FONT_SIZE = r'C:\Windows\Fonts\gulim.ttc', 2, 12
+ROWBYTES = W // 2
+ROW_Y0, ROWS, ROW_H = 64, 12, 32
+COL_W = W
+FONT_PATH, FONT_INDEX, FONT_SIZE = r'C:\Windows\Fonts\gulim.ttc', 2, 22
 SPACE_PX = 4
 
 # 원문 12줄 (위→아래) 과 번역. 용어는 기존 코퍼스·script00 번역과 일치시킨다.
@@ -117,21 +118,34 @@ def render_text(text, font):
     return im, box
 
 
+def unpack_clut4(raw):
+    out = bytearray(len(raw) * 2)
+    for i, value in enumerate(raw):
+        out[i * 2] = value & 0x0F
+        out[i * 2 + 1] = value >> 4
+    return out
+
+
+def pack_clut4(indices):
+    out = bytearray(len(indices) // 2)
+    for i in range(0, len(indices), 2):
+        out[i // 2] = (indices[i] & 0x0F) | ((indices[i + 1] & 0x0F) << 4)
+    return out
+
+
 def main(make_iso=False):
     ents, ent, ref = load_member()
     d = bytearray(ent['data'])
     # 원본(REF)에서 측정하고, 원본 픽셀을 출발점으로 다시 그린다 -> 몇 번 돌려도 같은 결과.
-    tex_size = W * H
-    orig = bytes(unswizzle(bytes(ref[TEX_OFF:TEX_OFF + tex_size]), W, H))
+    tex_size = ROWBYTES * H
+    orig_raw = unswizzle(bytes(ref[TEX_OFF:TEX_OFF + tex_size]), ROWBYTES, H)
+    orig = bytes(unpack_clut4(orig_raw))
     idx = bytearray(orig)
+    pal = d[PAL_OFF:PAL_OFF + 1024]
+    alpha = [pal[i * 4 + 3] for i in range(16)]
+    alpha_to_index = [min(range(16), key=lambda i: abs(alpha[i] - a)) for a in range(256)]
 
     font = ImageFont.truetype(FONT_PATH, FONT_SIZE, index=FONT_INDEX)
-    # 게임이 좌·우 두 상태를 같은 간판에 위아래로 합성한다. 두 열 모두에
-    # 완성 글자를 넣으면 지명이 두 겹으로 나온다. 우열은 비우고 좌열만 쓴다.
-    for y in range(ROW_Y0, ROW_Y0 + ROWS * ROW_H):
-        for x in range(COL_W, W):
-            idx[y * W + x] = 0
-
     for x0 in (0,):
         for row, (jp, ko) in enumerate(NAMES):
             row_top = ROW_Y0 + row * ROW_H
@@ -153,20 +167,18 @@ def main(make_iso=False):
             for yy in range(gh):
                 for xx in range(gw):
                     v = im.getpixel((box[0] + xx, box[1] + yy))
-                    if v < 96:
+                    if v < 8:
                         continue
                     ty, tx = base_y + yy, base_x + xx
                     if row_top <= ty < row_bottom and x0 <= tx < x0 + COL_W:
-                        # 8bit 색인의 하위 니블만 켠다. 0xFF는 두 합성 층이
-                        # 모두 불투명해 같은 글자가 위·아래로 두 번 나온다.
-                        idx[ty * W + tx] = 0xF0
+                        idx[ty * W + tx] = alpha_to_index[v]
 
     # 손대지 않아야 하는 영역 확인
     for y in list(range(0, ROW_Y0)) + list(range(ROW_Y0 + ROWS * ROW_H, H)):
         if idx[y * W:(y + 1) * W] != orig[y * W:(y + 1) * W]:
             raise SystemExit(f'보존 영역 y={y} 가 변경됐다')
 
-    encoded = swizzle(bytes(idx), W, H)
+    encoded = swizzle(bytes(pack_clut4(idx)), ROWBYTES, H)
     tail_before = bytes(d[TEX_OFF + tex_size:])
     d[TEX_OFF:TEX_OFF + tex_size] = encoded
     assert bytes(d[TEX_OFF + tex_size:]) == tail_before, '텍스처 뒤 데이터 변경'
@@ -180,7 +192,6 @@ def main(make_iso=False):
     print(f'ANMPACK.DAT 갱신 ({len(packed):,}B, 크기 불변)')
 
     # 미리보기
-    pal = d[PAL_OFF:PAL_OFF + 1024]
     P = [tuple(pal[i * 4:i * 4 + 4]) for i in range(256)]
     im = Image.new('RGBA', (W, ROW_Y0 + ROWS * ROW_H))
     im.putdata([P[v] for v in idx[:W * (ROW_Y0 + ROWS * ROW_H)]])
