@@ -70,9 +70,14 @@ python iso_quickpatch/build_range_pack.py
 
 csc /target:winexe /optimize+ \
   /out:iso_quickpatch/D2_ISO_QuickPatch.exe \
-  /resource:iso_quickpatch/D2_ISO_ranges.bin,D2_ISO_ranges.bin \
   iso_quickpatch/D2IsoQuickPatch.cs
 ```
+
+> v20260829부터 구간 데이터를 exe에 **임베드하지 않습니다**(`/resource:` 없음).
+> "17KB 코드 + 11MB 불투명 블롭"인 미서명 exe가 Windows Defender 클라우드 ML의
+> 오탐을 유발해 다운로드가 막힌다는 제보가 있었습니다. 이제 exe는 17KB이고
+> `D2_ISO_ranges.bin`은 **같은 폴더의 별도 파일**로 배포합니다 — 배포 시 두 파일을
+> 반드시 함께 두어야 합니다.
 
 ## 기술 메모
 

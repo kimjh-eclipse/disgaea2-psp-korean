@@ -16,13 +16,15 @@ using System.Windows.Forms;
 // 원본과 패치본 ISO 크기가 완전히 동일하므로(854,360,064B) ISO 내부 파일을 찾을
 // 필요 없이 **절대 오프셋 구간**만 덮어쓰면 된다.
 //
-// 임베드 리소스 D2_ISO_ranges.bin 포맷 (build_range_pack.py 생성):
+// 패치 데이터 D2_ISO_ranges.bin 포맷 (build_range_pack.py 생성).
+// v20260829 부터 exe 에 임베드하지 않고 **같은 폴더의 별도 파일**로 배포한다
+// (미서명 exe + 11MB 블롭이 Defender 오탐을 유발했다 — OpenPatchData 주석 참고):
 //   magic "D2PSPRNG1" / u32 version / u16 titleLen + utf8 title
 //   u64 isoSize / 32B srcHash / 32B dstHash / u32 rangeCount
 //   rangeCount x { u64 offset, u32 length, length bytes }
 internal static class D2IsoQuickPatch
 {
-    private const string VersionText = "v20260828";
+    private const string VersionText = "v20260829";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
     private const string PackMagic = "D2PSPRNG1";
     private const int FormatVersion = 1;
@@ -52,12 +54,48 @@ internal static class D2IsoQuickPatch
 
     // ---------- 리소스 ----------
 
+    // 패치 데이터를 **exe 밖의 별도 파일**에서 읽는다.
+    //
+    // ★ 예전에는 11MB 짜리 구간 데이터를 exe 안에 임베드했다. 그 결과 "17KB 코드 +
+    //   11MB 불투명 블롭" 인 미서명 실행 파일이 되어, Windows Defender 의 클라우드
+    //   ML 휴리스틱과 SmartScreen 이 이를 악성으로 오탐해 **다운로드 자체가 막히는**
+    //   사용자가 나왔다(오탐 신고 2건). 데이터를 밖으로 빼면 exe 는 17KB 짜리
+    //   평범한 크기가 되어 그 요인이 사라진다.
+    //
+    //   따라서 exe 와 D2_ISO_ranges.bin 은 **항상 같은 폴더에 함께 두어야 한다.**
+    private static Stream OpenPatchData()
+    {
+        string exeDir = Path.GetDirectoryName(
+            Assembly.GetExecutingAssembly().Location);
+        string[] candidates = new string[]
+        {
+            string.IsNullOrEmpty(exeDir) ? PatchResourceName
+                                         : Path.Combine(exeDir, PatchResourceName),
+            Path.Combine(Directory.GetCurrentDirectory(), PatchResourceName),
+        };
+        foreach (string path in candidates)
+        {
+            if (File.Exists(path))
+                return new FileStream(path, FileMode.Open, FileAccess.Read,
+                                      FileShare.Read, 1 << 20);
+        }
+
+        // 구버전 호환: 임베드되어 있으면 그것도 받아들인다.
+        Stream embedded = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream(PatchResourceName);
+        if (embedded != null)
+            return embedded;
+
+        throw new FileNotFoundException(
+            "패치 데이터 파일을 찾을 수 없습니다: " + PatchResourceName + "\n\n" +
+            "이 프로그램은 같은 폴더에 있는 " + PatchResourceName + " 을 읽습니다.\n" +
+            "ZIP 을 풀 때 patcher 폴더의 두 파일(exe 와 .bin)을 함께 두세요.\n" +
+            "exe 만 따로 옮기면 동작하지 않습니다.");
+    }
+
     private static Pack LoadPack()
     {
-        Stream resource = Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream(PatchResourceName);
-        if (resource == null)
-            throw new InvalidDataException("패치 리소스가 없습니다: " + PatchResourceName);
+        Stream resource = OpenPatchData();
 
         using (resource)
         using (BinaryReader r = new BinaryReader(resource, Encoding.UTF8))
