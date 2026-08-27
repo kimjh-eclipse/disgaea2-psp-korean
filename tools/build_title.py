@@ -7,7 +7,8 @@
 기존 build_jp/TXPPACK.DAT가 있으면 이름표 등 앞선 수정을 보존하기 위해 그것을 기반으로 한다.
 사용:
   python tools/build_title.py
-  D2_ISO_DST=build_jp/D2_JP_KR_title.iso python tools/build_title.py --iso
+  python tools/build_title.py --iso          # build_jp/D2_JP_KR.iso 제자리 수정
+  D2_ISO_DST=<다른.iso> python tools/build_title.py --iso
 """
 import io
 import os
