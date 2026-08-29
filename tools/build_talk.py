@@ -215,6 +215,9 @@ def main(make_iso=False):
             assert r['where'] == '제자리', f"슬롯 안에 들어가야 한다: {r['where']}"
         print(f"ISO 갱신: SCRIPTPACK -> {r['where']}, {r['size']}B")
 
+    from code_sync import write_stamp
+    print(f'SCRIPTPACK 코드표 동기화: {write_stamp("SCRIPTPACK")[:16]}')
+
 
 if __name__ == '__main__':
     main('--iso' in sys.argv)

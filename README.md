@@ -60,6 +60,8 @@ python tools/build_title.py --iso    # 타이틀 로고 (nameplate 뒤에)
 python tools/build_names.py --iso    # 루트 NAME.DAT
 python tools/build_vmnames.py --iso  # 유닛 이름 풀 (실제 사용처)
 python tools/build_opening_text.py --iso  # 오프닝 나레이션 (ANMPACK/anm7101)
+python tools/build_dlc.py             # DLC 18개 (코드표 동기화 검사 포함)
+python tools/verify_dlc.py            # DLC 구조·번역·비대상 데이터 검증
 python tools/verify_iso.py           # 정적 검증
 ```
 
@@ -69,15 +71,21 @@ python tools/verify_iso.py           # 정적 검증
 python iso_quickpatch/build_range_pack.py
 
 csc /target:winexe /optimize+ \
-  /out:iso_quickpatch/D2_ISO_QuickPatch.exe \
+  /out:iso_quickpatch/D2_Korean_QuickPatch.exe \
   iso_quickpatch/D2IsoQuickPatch.cs
 ```
 
 > v20260829부터 구간 데이터를 exe에 **임베드하지 않습니다**(`/resource:` 없음).
-> "17KB 코드 + 11MB 불투명 블롭"인 미서명 exe가 Windows Defender 클라우드 ML의
-> 오탐을 유발해 다운로드가 막힌다는 제보가 있었습니다. 이제 exe는 17KB이고
+> "작은 코드 + 11MB 불투명 블롭"인 미서명 exe가 Windows Defender 클라우드 ML의
+> 오탐을 유발해 다운로드가 막힌다는 제보가 있었습니다. 이제 exe는 약 24KB이고
 > `D2_ISO_ranges.bin`은 **같은 폴더의 별도 파일**로 배포합니다 — 배포 시 두 파일을
 > 반드시 함께 두어야 합니다.
+
+v20260830부터 빠른패처 하나에서 본편 ISO와 DLC를 함께 처리합니다. ISO와
+`PSP/GAME/ULJS00183` 폴더를 선택하면 설치된 `DL_JP_00.EDAT`~`17.EDAT`만
+파일별로 검사해 패치합니다. 설치되지 않은 번호는 오류나 빈 파일 생성 없이
+건너뛰며, 해시가 다른 파일도 안전을 위해 수정하지 않습니다. DLC용 5개 xdelta와
+`xdelta.exe`도 실행 파일과 같은 폴더에 둬야 합니다.
 
 ## 기술 메모
 

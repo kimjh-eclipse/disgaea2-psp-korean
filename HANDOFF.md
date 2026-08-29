@@ -2213,3 +2213,173 @@ ANM 헤더의 시트 기술자는 외부/센티널 값(`bpp=4`, `off=0`, `width=
 
 현재 최종 ISO는 `build_jp/D2_JP_KR.iso`다. 이후 간판 글꼴이나 번역을 바꿀 때는
 `NAMES`/폰트 설정만 수정하고 반드시 `tools/build_signatlas.py --iso`로 재생성한다.
+
+## 35. ★★ ULJS00183 추가 패키지 구조 규명·전량 한글화 (2026-08-29)
+
+`../ULJS00183.zip`의 일본어판 DLC를 분석해 본편과 별도의 느슨한 파일 패치로
+완성했다. ISO 안에 넣는 데이터가 아니므로 **본편 xdelta와 DLC xdelta는 별도**다.
+
+### 35-1. 설치 구조
+
+압축을 풀면 다음 19개 파일이 한 폴더에 바로 놓인다. 중첩 폴더를 만들지 않는다.
+
+```
+PSP/GAME/ULJS00183/
+  PARAM.PBP
+  DL_JP_00.EDAT ... DL_JP_17.EDAT
+```
+
+현재 PPSSPP에는 다음 위치로 설치했다.
+
+`C:\Users\OXP2\Documents\PPSSPP\PSP\GAME\ULJS00183`
+
+`PARAM.PBP`는 `CATEGORY=MG`, `DISC_ID=ULJS00183`인 메타데이터 셸이며 실행 파일은
+없다. 게임 EBOOT가 `DL_JP_%02d.EDAT`를 직접 찾는다.
+
+### 35-2. 18개 EDAT은 실제로 5개 누적 세대
+
+각 EDAT은 평문 `NISPACK`이고 멤버는 항상 세 개다.
+
+- `sound_02_jp.dat`
+- `cutinPack.dat`
+- `start_jp.lzs`
+
+18개 파일은 아래처럼 정확히 같은 5개 스냅샷으로 묶인다.
+
+| 대표 | 같은 파일명 | 의미 |
+|---:|---|---|
+| 00 | 00–04 | 1세대 |
+| 05 | 05–08 | 2세대 누적 |
+| 09 | 09–12 | 3세대 누적 |
+| 13 | 13–16 | 4세대 누적 |
+| 17 | 17 | 최종 누적 |
+
+파일명이 로더 키일 수 있으므로 5개만 설치하면 안 된다. **18개 이름은 모두 유지**하되,
+배포 패치는 대표 5개에만 xdelta를 적용하고 같은 세대 이름으로 복제한다.
+
+### 35-3. 번역 범위와 톤
+
+본편 번역표로 이미 덮이는 문자열을 제외하고 DLC 신규 고유 문자열 **1,604건**을
+직접 번역했다. NLLB 시험 파일은 품질이 낮아 참고용으로만 남겼고 빌드에는 쓰지 않는다.
+
+| 파일 | 신규 고유 |
+|---|---:|
+| `InProgramTxtDB.dat` | 1,548 |
+| `char.dat` | 45 |
+| `charhelp.dat` | 10 |
+| `sys2.txp` | 1 |
+
+번역표:
+
+- `work/tr_dlc_dialogue_01.py` ... `tr_dlc_dialogue_11.py`
+- `work/tr_dlc_fixed.py`
+
+말투는 본편 용어집을 그대로 따른다. 토로는 `~냐`, 쿠로는 `~먀`, 로자리는
+`짐/~느니라`, 하나코는 아델을 `오빠`로 부른다. 알마스·사파이어·다크 에클레르·
+플레네르 등 기존 표기도 그대로 사용했다. `￥`, `π`, `η`, `Э` 제어문자는 보존했다.
+
+### 35-4. 빌드 방식
+
+`tools/build_dlc.py`가 각 대표 EDAT의 `start_jp.lzs`를 풀어 다음만 수정한다.
+
+1. DLC 누적 `InProgramTxtDB.dat` — 본편 2,911건 + DLC 1,548건 적용, 대사 전각화
+2. `sys2.txp`, `char.dat`, `charhelp.dat` 등 고정 DB — 레코드별 실제 용량 검사
+3. 본편 최신 `script00.dat`와 폰트 4종 — **같은 한글 코드표 강제**
+4. 나머지 DLC 전용 `waku.txp`, `anm0000.dat`, 음성, 컷인은 원본 그대로 보존
+
+중요: DLC에 새 음절이 생기면 `tools/bake_font.py`가 코드표를 다시 고르므로,
+반드시 다음 순서로 빌드한다.
+
+```
+python tools/bake_font.py
+python tools/build_jp.py --iso
+python tools/build_talk.py --iso
+python tools/build_dlc.py
+python tools/verify_dlc.py
+```
+
+본편을 다시 인코딩하지 않고 DLC만 만들면 START의 `script00.dat`뿐 아니라 ISO 별도
+아카이브인 **`SCRIPTPACK.DAT` 전체 대사도 폰트 코드표와 어긋난다.** 실제 첫 DLC
+빌드에서 START만 재인코딩해 기존 대사가 전부 다른 한글로 표시되는 회귀가 발생했고,
+`tools/build_talk.py --iso`로 9,822건/63,120회 대사를 새 코드표로 다시 만들어 복구했다.
+`tools/code_sync.py`의 지문 표식을 추가했으므로 이제 font/START/SCRIPTPACK 셋 중
+하나라도 현재 코드표와 다르면 `build_dlc.py`가 시작 전에 중단한다.
+
+이번 최종본은 위 순서로 동기화했으며 본편 `verify_iso.py`도 전체 통과했다.
+
+### 35-5. 최종 검증
+
+`tools/verify_dlc.py` 결과:
+
+- 5개 세대 모두 NISPACK/START 왕복 성공
+- `sound_02_jp.dat`, `cutinPack.dat` 원본과 동일
+- START의 비대상 7개 멤버 원본과 동일
+- 고정 DB 크기 불변
+- 같은 세대 별칭 파일 SHA-256 동일
+- DLC 신규 일본어 원문 잔존 **0건**
+- `PARAM.PBP` 원본과 동일
+
+산출물:
+
+- 완성 DLC: `build_dlc/ULJS00183_KR/` (18 EDAT + PARAM.PBP)
+- 해시: `build_dlc/manifest.json`
+- 배포 ZIP: `build_dlc/D2_DLC_KR_patch.zip`
+- 배포 폴더: `build_dlc/D2_DLC_KR_patch/`
+
+배포 폴더에는 `group_00/05/09/13/17.xdelta`, `xdelta.exe`,
+`DLC_패치_적용.bat`, 설명서가 있다. 실제 원본 DLC에서 배치를 시험해 19개 결과가
+직접 빌드본과 SHA-256 **전부 일치**하는 것을 확인했다.
+
+### 35-6. 현재 상태
+
+- 최신 본편 ISO: `build_jp/D2_JP_KR.iso`
+- DLC: PPSSPP 경로에 설치 완료
+- PPSSPP 실행 완료
+- 정적/구조 검증은 완료. **인게임 DLC 의제 진입과 대사 육안 확인은 사용자 확인 대기**
+
+## 36. v20260830 ISO + DLC 통합 릴리즈 패처
+
+`iso_quickpatch/D2IsoQuickPatch.cs`를 본편 ISO와 느슨한 DLC를 한 번에 처리하도록
+확장했다. GUI 입력은 두 개다.
+
+1. 일본판 원본 ISO
+2. 선택 사항인 `PSP/GAME/ULJS00183` DLC 폴더
+
+`한국어화 적용`을 누르면 ISO 구간 패치를 먼저 적용하고, DLC 경로가 지정됐으면
+`DL_JP_00.EDAT`~`DL_JP_17.EDAT`을 **각 파일별로** 확인한다. 없는 번호는 건너뛰고,
+원본 SHA-256과 맞는 파일만 해당 누적 세대의 xdelta를 적용한다. 이미 한국어판
+해시인 파일은 재적용하지 않으며, 어느 쪽 해시도 아닌 파일은 안전을 위해 건드리지
+않는다. 따라서 DLC를 일부만 설치한 사용자도 그대로 쓸 수 있다.
+
+배포 sidecar:
+
+```
+D2_Korean_QuickPatch.exe
+D2_ISO_ranges.bin
+xdelta.exe
+D2_DLC_group_00.xdelta
+D2_DLC_group_05.xdelta
+D2_DLC_group_09.xdelta
+D2_DLC_group_13.xdelta
+D2_DLC_group_17.xdelta
+```
+
+ISO는 기존처럼 변경 구간을 `<ISO>.d2bak`에 저장한다. DLC는 적용되는 각 EDAT의
+원본을 `<EDAT>.d2bak`으로 보존한다. 통합 `백업으로 되돌리기`는 양쪽 백업을 함께
+복원한다. 명령행은 다음 형식도 지원한다.
+
+```
+D2_Korean_QuickPatch.exe --cli "원본.iso" --dlc ".../PSP/GAME/ULJS00183"
+D2_Korean_QuickPatch.exe --cli "패치본.iso" --dlc ".../ULJS00183" --verify
+D2_Korean_QuickPatch.exe --cli "패치본.iso" --dlc ".../ULJS00183" --restore
+```
+
+실제 원본 ISO와 DLC 대표 파일 5개만 둔 부분 설치 폴더로 통합 적용을 시험했다.
+ISO 결과 SHA-256은 `A1A5D85EA6EACF6E7F88B8EF8B9F88C1CCD2C1B15D67BACCEDE79E01E1DA40F7`,
+각 DLC 결과는 `build_dlc/manifest.json`과 일치했다. 존재한 5개만 패치되고 누락된
+13개는 생성되지 않았으며, ISO와 5개 EDAT의 `.d2bak` 백업도 모두 생성됐다.
+
+이후 18개 EDAT 전체로 확대해 적용→복원→재적용 왕복도 시험했다. 복원 후 ISO는
+원본 SHA-256, DLC 18개는 각 원본 SHA-256과 모두 일치했고, 재적용 후에는 다시
+완성 ISO와 DLC manifest 해시에 전부 일치했다. 최종 배포 폴더는
+`release_v20260830/`, ZIP은 `D2_Korean_v20260830.zip`이다.

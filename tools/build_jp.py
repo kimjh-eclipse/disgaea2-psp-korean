@@ -45,11 +45,6 @@ def main(make_iso=False):
         sp=_ilu.spec_from_file_location('b',bp); mm=_ilu.module_from_spec(sp)
         sp.loader.exec_module(mm); T.update(mm.T)
     if T:
-        bad=[(k,krtext.validate(v)) for k,v in T.items() if krtext.validate(v)]
-        if bad:
-            print(f'!! InProgramTxtDB 인코딩 불가 {len(bad)}건')
-            for k,b in bad[:8]: print(f'   {"".join(b)} : {T[k]}')
-            raise SystemExit(1)
         # talk 와 같은 렌더러(고정 바이트 오프셋 줄자르기)이므로 대사 전각화 필수
         FW_MAP={' ':'　','.':'．',',':'，','!':'！','?':'？','~':'～',
                 ':':'：',';':'；','(':'（',')':'）','-':'－','/':'／'}
@@ -58,6 +53,13 @@ def main(make_iso=False):
             FW_MAP[chr(0x41+_n)]=chr(0xFF21+_n)
             FW_MAP[chr(0x61+_n)]=chr(0xFF41+_n)
         fw=lambda t:''.join(FW_MAP.get(c,c) for c in t)
+        # ASCII 물음표 등은 의도적으로 빈 글리프라서 원문 번역표 상태로
+        # validate 하면 정상 번역까지 실패한다. 실제 기록값(전각화 후)을 검사한다.
+        bad=[(k,krtext.validate(fw(v))) for k,v in T.items() if krtext.validate(fw(v))]
+        if bad:
+            print(f'!! InProgramTxtDB 인코딩 불가 {len(bad)}건')
+            for k,b in bad[:8]: print(f'   {"".join(b)} : {T[k]}')
+            raise SystemExit(1)
         enc={jp.encode('cp932'):krtext.encode(fw(ko)) for jp,ko in T.items()}
         edits={off:enc[raw] for off,raw in talkfile.strings(ipt) if raw in enc}
         ipt_new=talkfile.rebuild(ipt,edits)
@@ -206,6 +208,8 @@ def main(make_iso=False):
         r2=isopatch.replace(dst, 24, b'EBOOT.BIN', enc, slot_lba=32, slot_sectors=832-32)
         assert r2['where']=='제자리'
         print(f"ISO 갱신: EBOOT.BIN(재암호화 ~PSP, 덤프꼬리 {cut}B 절단) {r2['size']:,}B")
+    from code_sync import write_stamp
+    print(f'START 코드표 동기화: {write_stamp("START")[:16]}')
     return raw
 
 if __name__=='__main__':

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -10,7 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-// 마계전기 디스가이아 2 PORTABLE (ULJS00183) 한국어화 — ISO 제자리 패처
+// 마계전기 디스가이아 2 PORTABLE (ULJS00183) 한국어화 — ISO + DLC 통합 패처
 //
 // OGMD 패처(work_ogmd/iso_quickpatch)와 같은 구조지만 D2 는 훨씬 단순하다.
 // 원본과 패치본 ISO 크기가 완전히 동일하므로(854,360,064B) ISO 내부 파일을 찾을
@@ -24,7 +25,7 @@ using System.Windows.Forms;
 //   rangeCount x { u64 offset, u32 length, length bytes }
 internal static class D2IsoQuickPatch
 {
-    private const string VersionText = "v20260829";
+    private const string VersionText = "v20260830";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
     private const string PackMagic = "D2PSPRNG1";
     private const int FormatVersion = 1;
@@ -51,6 +52,37 @@ internal static class D2IsoQuickPatch
     }
 
     private enum Mode { Patch, Restore, Verify }
+
+    private sealed class DlcGroup
+    {
+        public int First, Last;
+        public string Representative, SourceHash, TargetHash;
+        public DlcGroup(int first, int last, string representative,
+                        string sourceHash, string targetHash)
+        {
+            First = first; Last = last; Representative = representative;
+            SourceHash = sourceHash; TargetHash = targetHash;
+        }
+    }
+
+    private static readonly DlcGroup[] DlcGroups = new DlcGroup[]
+    {
+        new DlcGroup(0, 4, "00",
+            "FE96431E2881A3A3166163BE46FC3977A78731814E441D775E07D7C2F7ED3AED",
+            "31095C063F1BE34A91E58F291FAC6DBD962840364F055458A70F8BFBD26DD28D"),
+        new DlcGroup(5, 8, "05",
+            "3A43D79E4CC5D2DB32F1282EB7C072A39BFD2F8C603B1F8B3A1FA7CD23B26C3D",
+            "BDBB3972CA424FA2A6D269AECA772FA39ADFF687375489E0590BDCCA1EB3C198"),
+        new DlcGroup(9, 12, "09",
+            "605ABE5F19D02744EF2F17582E2E9009CC490AFA513CB0BB9379DE643E205FB8",
+            "60EF62B5933B2A084373AE3FE7D5B2461B9EEA86B5526381D25E588C9587D1CC"),
+        new DlcGroup(13, 16, "13",
+            "C93C1B70F8615AFCCF51E83EA17D99BA4C9A2952986F75D21AAE1B22E181E52F",
+            "CE6541FD7ADA3629FEF9E7F6EDD474D5E6BF35C593C33D68CC1C92394BB6E421"),
+        new DlcGroup(17, 17, "17",
+            "C0FC7185C43FC1D7D307E4AFE2F1B518AE95A2F4B5E21CD458B5950C6EC232B0",
+            "327582A6F88D92B2F29B19DFF99EA23750CC16FC24940714EFABCB4AC99663FD"),
+    };
 
     // ---------- 리소스 ----------
 
@@ -312,7 +344,7 @@ internal static class D2IsoQuickPatch
 
         log(string.Empty);
         log("완료. 한국어화가 적용되었습니다.");
-        log("PPSSPP 로 실행하세요. 실기(CFW)에서는 동작하지 않습니다.");
+        log("PPSSPP 로 실행하세요. 실기(CFW)는 아직 검증되지 않았습니다.");
         if (progress != null) progress(100);
     }
 
@@ -362,11 +394,164 @@ internal static class D2IsoQuickPatch
         if (progress != null) progress(100);
     }
 
+    // ---------- DLC (PSP/GAME/ULJS00183) ----------
+
+    private static string SidecarPath(string name)
+    {
+        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        string first = string.IsNullOrEmpty(exeDir) ? name : Path.Combine(exeDir, name);
+        if (File.Exists(first)) return first;
+        string second = Path.Combine(Directory.GetCurrentDirectory(), name);
+        if (File.Exists(second)) return second;
+        throw new FileNotFoundException("DLC 패치 구성 파일을 찾을 수 없습니다: " + name);
+    }
+
+    private static string Q(string value)
+    {
+        return "\"" + value.Replace("\"", "\\\"") + "\"";
+    }
+
+    private static void ApplyXdelta(string source, string patch, string output)
+    {
+        ProcessStartInfo info = new ProcessStartInfo();
+        info.FileName = SidecarPath("xdelta.exe");
+        info.Arguments = "-f -d -s " + Q(source) + " " + Q(patch) + " " + Q(output);
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        info.RedirectStandardOutput = true;
+        info.RedirectStandardError = true;
+        using (Process process = Process.Start(info))
+        {
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidDataException(
+                    "xdelta 적용 실패(" + process.ExitCode + ")\n" + stdout + stderr);
+        }
+    }
+
+    private static void RunDlc(string dlcPath, Mode mode, Action<string> log,
+                               Action<int> progress)
+    {
+        if (string.IsNullOrWhiteSpace(dlcPath))
+        {
+            log("DLC 폴더 미지정: DLC 패치는 건너뜁니다.");
+            if (progress != null) progress(100);
+            return;
+        }
+        dlcPath = dlcPath.Trim().Trim('"');
+        if (!Directory.Exists(dlcPath))
+            throw new DirectoryNotFoundException("DLC 폴더를 찾을 수 없습니다: " + dlcPath);
+
+        log(string.Empty);
+        log("DLC 확인: " + dlcPath);
+        int present = 0, missing = 0, patched = 0, already = 0, mismatch = 0, restored = 0;
+        int ordinal = 0;
+        const int total = 18;
+
+        foreach (DlcGroup group in DlcGroups)
+        {
+            string patchPath = null;
+            for (int number = group.First; number <= group.Last; number++)
+            {
+                ordinal++;
+                string name = "DL_JP_" + number.ToString("00", CultureInfo.InvariantCulture) + ".EDAT";
+                string path = Path.Combine(dlcPath, name);
+                string backup = path + ".d2bak";
+
+                if (mode == Mode.Restore)
+                {
+                    if (!File.Exists(backup))
+                    {
+                        missing++;
+                        log("  없음/백업 없음, 건너뜀: " + name);
+                    }
+                    else
+                    {
+                        string backupHash = Sha256(backup, null);
+                        if (!string.Equals(backupHash, group.SourceHash,
+                                           StringComparison.OrdinalIgnoreCase))
+                        {
+                            mismatch++;
+                            log("  백업 해시 불일치, 건너뜀: " + name);
+                        }
+                        else
+                        {
+                            File.Copy(backup, path, true);
+                            restored++;
+                            log("  원본 복원: " + name);
+                        }
+                    }
+                    if (progress != null) progress((int)(ordinal * 100L / total));
+                    continue;
+                }
+
+                if (!File.Exists(path))
+                {
+                    missing++;
+                    log("  없음, 건너뜀: " + name);
+                    if (progress != null) progress((int)(ordinal * 100L / total));
+                    continue;
+                }
+                present++;
+                string current = Sha256(path, null);
+                if (string.Equals(current, group.TargetHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    already++;
+                    log("  이미 적용됨: " + name);
+                }
+                else if (!string.Equals(current, group.SourceHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    mismatch++;
+                    log("  원본 해시 불일치, 건너뜀: " + name);
+                }
+                else if (mode == Mode.Verify)
+                {
+                    log("  원본(미패치): " + name);
+                }
+                else
+                {
+                    if (patchPath == null)
+                        patchPath = SidecarPath(
+                            "D2_DLC_group_" + group.Representative + ".xdelta");
+                    if (!File.Exists(backup)) File.Copy(path, backup, false);
+                    string temp = path + ".d2tmp";
+                    if (File.Exists(temp)) File.Delete(temp);
+                    try
+                    {
+                        ApplyXdelta(path, patchPath, temp);
+                        string after = Sha256(temp, null);
+                        if (!string.Equals(after, group.TargetHash,
+                                           StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("DLC 적용 후 해시 불일치: " + name);
+                        File.Replace(temp, path, null);
+                        patched++;
+                        log("  적용 완료: " + name);
+                    }
+                    finally
+                    {
+                        if (File.Exists(temp)) File.Delete(temp);
+                    }
+                }
+                if (progress != null) progress((int)(ordinal * 100L / total));
+            }
+        }
+
+        log(string.Format(CultureInfo.InvariantCulture,
+            "DLC 결과: 존재 {0} / 적용 {1} / 이미 적용 {2} / 복원 {3} / 없음 {4} / 불일치 {5}",
+            present, patched, already, restored, missing, mismatch));
+        if (mismatch > 0)
+            log("※ 해시 불일치 파일은 안전을 위해 수정하지 않았습니다.");
+        if (progress != null) progress(100);
+    }
+
     // ---------- GUI ----------
 
     private sealed class MainForm : Form
     {
         private readonly TextBox isoBox = new TextBox();
+        private readonly TextBox dlcBox = new TextBox();
         private readonly TextBox logBox = new TextBox();
         private readonly ProgressBar bar = new ProgressBar();
         private readonly Button patchBtn = new Button();
@@ -377,7 +562,7 @@ internal static class D2IsoQuickPatch
         {
             Text = "디스가이아 2 PORTABLE 한국어화 패처 " + VersionText;
             Width = 760;
-            Height = 520;
+            Height = 600;
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("맑은 고딕", 9F);
             AllowDrop = true;
@@ -389,7 +574,11 @@ internal static class D2IsoQuickPatch
             DragDrop += delegate(object s, DragEventArgs e)
             {
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files.Length > 0) isoBox.Text = files[0];
+                if (files.Length > 0)
+                {
+                    if (Directory.Exists(files[0])) dlcBox.Text = files[0];
+                    else isoBox.Text = files[0];
+                }
             };
 
             Label lbl = new Label();
@@ -414,25 +603,46 @@ internal static class D2IsoQuickPatch
             };
             Controls.Add(browse);
 
+            Label dlcLabel = new Label();
+            dlcLabel.Text = "DLC 폴더 (선택 사항, PSP/GAME/ULJS00183)";
+            dlcLabel.SetBounds(12, 68, 430, 18);
+            Controls.Add(dlcLabel);
+
+            dlcBox.SetBounds(12, 88, 620, 24);
+            Controls.Add(dlcBox);
+
+            Button dlcBrowse = new Button();
+            dlcBrowse.Text = "찾기";
+            dlcBrowse.SetBounds(640, 87, 90, 26);
+            dlcBrowse.Click += delegate
+            {
+                using (FolderBrowserDialog dlg = new FolderBrowserDialog())
+                {
+                    dlg.Description = "PARAM.PBP와 DL_JP_*.EDAT가 있는 ULJS00183 폴더를 선택하세요.";
+                    if (dlg.ShowDialog(this) == DialogResult.OK) dlcBox.Text = dlg.SelectedPath;
+                }
+            };
+            Controls.Add(dlcBrowse);
+
             patchBtn.Text = "한국어화 적용";
-            patchBtn.SetBounds(12, 68, 150, 34);
+            patchBtn.SetBounds(12, 124, 150, 34);
             patchBtn.Click += delegate { Start(Mode.Patch); };
             Controls.Add(patchBtn);
 
             verifyBtn.Text = "상태 확인";
-            verifyBtn.SetBounds(172, 68, 120, 34);
+            verifyBtn.SetBounds(172, 124, 120, 34);
             verifyBtn.Click += delegate { Start(Mode.Verify); };
             Controls.Add(verifyBtn);
 
             restoreBtn.Text = "백업으로 되돌리기";
-            restoreBtn.SetBounds(302, 68, 160, 34);
+            restoreBtn.SetBounds(302, 124, 160, 34);
             restoreBtn.Click += delegate { StartRestore(); };
             Controls.Add(restoreBtn);
 
-            bar.SetBounds(12, 112, 718, 18);
+            bar.SetBounds(12, 168, 718, 18);
             Controls.Add(bar);
 
-            logBox.SetBounds(12, 140, 718, 330);
+            logBox.SetBounds(12, 196, 718, 350);
             logBox.Multiline = true;
             logBox.ReadOnly = true;
             logBox.ScrollBars = ScrollBars.Vertical;
@@ -442,8 +652,9 @@ internal static class D2IsoQuickPatch
             Log("일본판 원본 ISO 를 선택하고 [한국어화 적용]을 누르세요.");
             Log("원본: Makai Senki Disgaea 2 Portable (Japan) (PSP) (PSN).iso");
             Log("적용 전 원본 구간을 .d2bak 백업으로 남깁니다.");
+            Log("DLC가 있으면 ULJS00183 폴더를 선택하세요. 없는 EDAT는 자동으로 건너뜁니다.");
             Log(string.Empty);
-            Log("※ PPSSPP 전용입니다. 실기(CFW)에서는 동작하지 않습니다.");
+            Log("※ PPSSPP에서 검증했습니다. 실기(CFW)는 아직 검증되지 않았습니다.");
         }
 
         private void Log(string text)
@@ -467,13 +678,28 @@ internal static class D2IsoQuickPatch
         private void Start(Mode mode)
         {
             string iso = isoBox.Text.Trim().Trim('"');
+            string dlc = dlcBox.Text.Trim().Trim('"');
             if (iso.Length == 0) { MessageBox.Show(this, "ISO 를 선택하세요."); return; }
+            if (dlc.Length > 0 && !Directory.Exists(dlc))
+            {
+                MessageBox.Show(this, "DLC 폴더를 찾을 수 없습니다:\n" + dlc);
+                return;
+            }
             SetBusy(true);
             SetProgress(0);
             logBox.Clear();
             Thread t = new Thread(delegate()
             {
-                try { Run(iso, mode, Log, SetProgress); }
+                try
+                {
+                    if (dlc.Length == 0)
+                        Run(iso, mode, Log, SetProgress);
+                    else
+                    {
+                        Run(iso, mode, Log, delegate(int p) { SetProgress(p * 3 / 4); });
+                        RunDlc(dlc, mode, Log, delegate(int p) { SetProgress(75 + p / 4); });
+                    }
+                }
                 catch (Exception ex) { Log(string.Empty); Log("오류: " + ex.Message); }
                 finally { SetBusy(false); }
             });
@@ -484,6 +710,7 @@ internal static class D2IsoQuickPatch
         private void StartRestore()
         {
             string iso = isoBox.Text.Trim().Trim('"');
+            string dlc = dlcBox.Text.Trim().Trim('"');
             if (iso.Length == 0) { MessageBox.Show(this, "ISO 를 선택하세요."); return; }
             string backup = iso + ".d2bak";
             if (!File.Exists(backup))
@@ -501,7 +728,18 @@ internal static class D2IsoQuickPatch
             string bk = backup;
             Thread t = new Thread(delegate()
             {
-                try { RestoreFromBackup(iso, bk, Log, SetProgress); }
+                try
+                {
+                    if (dlc.Length == 0)
+                        RestoreFromBackup(iso, bk, Log, SetProgress);
+                    else
+                    {
+                        RestoreFromBackup(iso, bk, Log,
+                            delegate(int p) { SetProgress(p * 3 / 4); });
+                        RunDlc(dlc, Mode.Restore, Log,
+                            delegate(int p) { SetProgress(75 + p / 4); });
+                    }
+                }
                 catch (Exception ex) { Log(string.Empty); Log("오류: " + ex.Message); }
                 finally { SetBusy(false); }
             });
@@ -517,12 +755,19 @@ internal static class D2IsoQuickPatch
     {
         bool cli = false;
         string iso = null;
+        string dlc = null;
         Mode mode = Mode.Patch;
         for (int i = 0; i < args.Length; i++)
         {
             string a = args[i];
             if (a == "--cli") cli = true;
             else if (a == "--verify") { cli = true; mode = Mode.Verify; }
+            else if (a == "--restore") { cli = true; mode = Mode.Restore; }
+            else if (a == "--dlc" && i + 1 < args.Length)
+            {
+                cli = true;
+                dlc = args[++i];
+            }
             else if (iso == null) iso = a;
         }
 
@@ -537,8 +782,28 @@ internal static class D2IsoQuickPatch
         AttachConsole(AttachParentProcess);
         try
         {
-            if (iso == null) { Console.WriteLine("사용: D2_ISO_QuickPatch.exe <ISO> [--verify]"); return 2; }
-            Run(iso, mode, Console.WriteLine, null);
+            if (iso == null)
+            {
+                Console.WriteLine(
+                    "사용: D2_Korean_QuickPatch.exe <ISO> [--dlc <ULJS00183 폴더>] " +
+                    "[--verify|--restore]");
+                return 2;
+            }
+            if (mode == Mode.Restore)
+            {
+                string backup = iso + ".d2bak";
+                if (!File.Exists(backup))
+                    throw new FileNotFoundException("ISO 백업을 찾을 수 없습니다: " + backup);
+                RestoreFromBackup(iso, backup, Console.WriteLine, null);
+                if (!string.IsNullOrWhiteSpace(dlc))
+                    RunDlc(dlc, Mode.Restore, Console.WriteLine, null);
+            }
+            else
+            {
+                Run(iso, mode, Console.WriteLine, null);
+                if (!string.IsNullOrWhiteSpace(dlc))
+                    RunDlc(dlc, mode, Console.WriteLine, null);
+            }
             return 0;
         }
         catch (Exception ex)

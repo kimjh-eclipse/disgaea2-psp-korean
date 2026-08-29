@@ -114,6 +114,8 @@ def main():
         for c1, c2, o, nw in all_moves:
             fp.write(f'{c1:02X}\t{c2:02X}\t{o}\t{nw}\n')
     print('코드표 저장')
+    from code_sync import write_stamp
+    print(f'폰트 코드표 지문: {write_stamp("font")[:16]}')
 
 
 if __name__ == '__main__':
