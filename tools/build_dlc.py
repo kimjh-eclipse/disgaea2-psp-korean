@@ -184,7 +184,7 @@ def install(output):
 
 def main(do_install=False):
     from code_sync import require_synced
-    require_synced('font', 'START', 'SCRIPTPACK')
+    require_synced('font', 'START', 'SCRIPTPACK', 'NAME', 'START_VM', 'CHAR')
     output = ROOT / 'build_dlc' / 'ULJS00183_KR'
     output.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / 'dlc_jp' / 'PARAM.PBP', output / 'PARAM.PBP')

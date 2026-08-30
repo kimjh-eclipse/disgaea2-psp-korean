@@ -86,6 +86,8 @@ def main(make_iso=False):
                              slot_lba=LBA, slot_sectors=NEXT - LBA)
         assert r['where'] == '제자리'
         print(f"ISO 갱신: START_VM_JP.LZS -> {r['where']}, {r['size']:,}B")
+    from code_sync import write_stamp
+    print(f'START_VM 코드표 동기화: {write_stamp("START_VM")[:16]}')
 
 
 if __name__ == '__main__':

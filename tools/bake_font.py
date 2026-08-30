@@ -28,6 +28,8 @@ from krfont import (load_page, save_page, wipe, bake, build_tables, bake_ascii,
 import hangul_rank
 from PIL import ImageFont
 
+CODEBOOK = 'work/hangul_codebook_v1.tsv'
+
 
 def used_syllables():
     """현재 번역이 실제로 쓰는 한글 음절"""
@@ -59,10 +61,18 @@ def main():
     assert MOVE_BASE + len(preserve) - 1 <= 2591, '보존분이 페이지 용량 초과'
 
     must = used_syllables()
-    chars = hangul_rank.pick(HANGUL_LIMIT, must=must)
-    dropped = hangul_rank.dropped(HANGUL_LIMIT, must=must)
-    print(f'한글 {len(chars)}자 선정 (번역 사용 {len(must)}자 강제 포함, 제외 {len(dropped)}자)')
-    print(f'  제외: {"".join(dropped)}')
+    with open(CODEBOOK, encoding='utf-8') as fp:
+        rows = [line.rstrip('\n').split('\t') for line in fp.readlines()[1:]]
+    chars = [row[1] for row in rows]
+    assert len(chars) == len(set(chars)) == HANGUL_LIMIT, '고정 코드북 크기/중복 오류'
+    missing = sorted(must - set(chars))
+    if missing:
+        raise RuntimeError(
+            '고정 코드북에 번역 실사용 음절이 없습니다: ' + ''.join(missing) + '\n' +
+            '기존 세이브 호환 때문에 자동 재배치하지 않습니다. 코드북 버전을 명시적으로 갱신하십시오.')
+    dropped = [c for c in hangul_rank.ksx1001() if c not in set(chars)]
+    print(f'한글 {len(chars)}자 고정 코드북 로드 (번역 사용 {len(must)}자, 제외 {len(dropped)}자)')
+    print(f'  코드북: {CODEBOOK}')
     assert len(chars) == HANGUL_LIMIT
 
     n = wipe(dst, GID_BASE, 2591)

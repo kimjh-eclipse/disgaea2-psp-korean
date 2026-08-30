@@ -82,6 +82,8 @@ def main(make_iso=False):
                              slot_lba=LBA, slot_sectors=NEXT - LBA)
         assert r['where'] == '제자리'
         print(f"ISO 갱신: NAME.DAT -> {r['where']}, {r['size']:,}B")
+    from code_sync import write_stamp
+    print(f'NAME 코드표 동기화: {write_stamp("NAME")[:16]}')
 
 
 if __name__ == '__main__':

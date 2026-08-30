@@ -73,6 +73,8 @@ def read_iso_file(f, dir_lba, name):
 
 
 def main():
+    from code_sync import require_synced
+    require_synced('font', 'START', 'SCRIPTPACK', 'NAME', 'START_VM', 'CHAR')
     dec = build_decoder()
     f = open(ISO, 'rb')
     ok = True
@@ -117,6 +119,23 @@ def main():
         if nm not in mods and not same:
             print(f'  !! {nm}: 손상'); ok = False
     print('  START 무손상 검증: ' + ('OK' if ok else 'FAIL'))
+
+    # --- 코드표 의존 루트 이름 풀 ---
+    # DLC 폰트 갱신 때 START/SCRIPTPACK만 다시 만들고 이 둘을 빠뜨려, 새 게임의
+    # 범용 유닛 이름부터 깨진 회귀가 있었다. ISO 안의 실물을 빌드본과 직접 비교한다.
+    name_dat, name_lba, name_size = read_iso_file(f, 25, b'NAME.DAT')
+    name_expected = open('build_jp/NAME.DAT', 'rb').read()
+    name_same = name_dat == name_expected
+    print(f'NAME.DAT       lba {name_lba} size {name_size} / 빌드 일치 {name_same}')
+    if not name_same:
+        ok = False
+
+    vm_lzs, vm_lba, vm_size = read_iso_file(f, 25, b'START_VM_JP.LZS')
+    vm_expected = open('build_jp/START_VM_JP.LZS', 'rb').read()
+    vm_same = vm_lzs == vm_expected and decompress(vm_lzs) == decompress(vm_expected)
+    print(f'START_VM_JP    lba {vm_lba} size {vm_size} / 이름 풀 빌드 일치 {vm_same}')
+    if not vm_same:
+        ok = False
 
     sc = mem['script00.dat']
     cnt, ptrs = parse(sc)

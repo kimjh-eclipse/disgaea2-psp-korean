@@ -34,5 +34,5 @@ def require_synced(*components):
     if stale:
         raise RuntimeError(
             '폰트 코드표와 재인코딩 산출물이 불일치: ' + ', '.join(stale) + '\n'
-            'python tools/build_jp.py --iso 및 python tools/build_talk.py --iso를 다시 실행하십시오.')
+            '코드 의존 산출물 전체(START, SCRIPTPACK, NAME, START_VM, CHAR)를 다시 빌드하십시오.')
     return current

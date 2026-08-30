@@ -84,6 +84,8 @@ def main(make_iso=False):
         r = isopatch.replace(dst, 25, b'CHAR.DAT', bytes(d),
                              slot_lba=ISO_LBA, slot_sectors=ISO_SECTORS)
         print(f"ISO 갱신: CHAR.DAT -> {r['where']}, {r['size']}B")
+    from code_sync import write_stamp
+    print(f'CHAR 코드표 동기화: {write_stamp("CHAR")[:16]}')
 
 
 if __name__ == '__main__':

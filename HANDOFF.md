@@ -2383,3 +2383,120 @@ ISO 결과 SHA-256은 `A1A5D85EA6EACF6E7F88B8EF8B9F88C1CCD2C1B15D67BACCEDE79E01E
 원본 SHA-256, DLC 18개는 각 원본 SHA-256과 모두 일치했고, 재적용 후에는 다시
 완성 ISO와 DLC manifest 해시에 전부 일치했다. 최종 배포 폴더는
 `release_v20260830/`, ZIP은 `D2_Korean_v20260830.zip`이다.
+
+## 37. ★ 코드표 고정 및 이름 회귀 수정, 의회 문구 검증 상태 (2026-08-30)
+
+### 37-1. 증상과 실제 원인
+
+DLC 번역에 필요한 새 음절을 추가한 뒤 `bake_font.py`의 실사용 빈도 기반 자동 선정이
+다시 실행되면서 한글 코드 위치 **968개가 이동**했다. 폰트와 START/SCRIPTPACK만
+일부 다시 만들면, 별도 코드 의존 파일에 이전 바이트가 남아 다음과 같은 회귀가 난다.
+
+- 새 게임에서도 범용 유닛 이름이 `엔렉용텍릭옛쉣`, `잇그베륵특`처럼 표시됨
+- 의회 항목과 설명도 서로 다른 한글로 표시됨
+
+따라서 이 문제는 세이브 데이터나 세이브 스테이트의 이름 배치 문제가 아니다.
+사용자가 지적한 대로 새 게임 및 의회 신규 진입에서도 발생할 수 있는 **폰트 코드표와
+텍스트 바이트의 불일치**였다. 세이브 스테이트로 단정했던 설명은 잘못이었다.
+
+### 37-2. 고정 코드북
+
+`work/hangul_codebook_v1.tsv`를 한글 코드 위치의 단일 기준으로 추가했다.
+v20260829에서 정상 표시되던 위치를 그대로 보존하고, 실제로 쓰지 않던 7개 자리만
+DLC 신규 음절로 교체했다.
+
+| index | 제외 | 신규 |
+|---:|---|---|
+| 596 | 먁 | 댓 |
+| 788 | 뽄 | 멎 |
+| 855 | 셥 | 뽑 |
+| 923 | 쌈 | 쏟 |
+| 936 | 쏠 | 쾅 |
+| 1348 | 켤 | 큠 |
+| 1507 | 퓌 | 핏 |
+
+- 구 정상 목록 SHA-256: `5f4417...`
+- 고정 코드북 SHA-256: `c187262f...`
+- 현재 동기화 지문: `d45aacb01731faf300f99b2f770039a3875d31cd2cd96ad7d525b062e2e7cc4d`
+
+`tools/bake_font.py`는 이제 위 TSV를 읽으며, 번역에 필요한 음절이 없으면 자동으로
+재배치하지 않고 빌드를 중단한다. 코드북을 바꿀 때는 반드시 명시적으로 새 버전을
+만들어야 한다. 복구·검증 도구는 다음과 같다.
+
+- `tools/make_stable_codebook.py`
+- `tools/verify_legacy_codebook.py`
+- `tools/diagnose_code_mismatch.py`
+
+v20260829 ISO와 비교했을 때 `talk00.dat`와 `fontB.fnt`가 바이트 단위로 일치해,
+기존 정상 코드 위치가 실제로 복원됐음을 확인했다.
+
+### 37-3. 코드 의존 산출물 전부 동기화
+
+다음 6개 루트를 같은 코드 지문으로 다시 빌드했다.
+
+1. `font` — 글꼴 맵/메트릭/글리프 페이지
+2. `START` — START 고정 DB와 UI 문자열
+3. `SCRIPTPACK` — 본편 대사
+4. `NAME` — 루트 `NAME.DAT`
+5. `START_VM` — 범용 이름 풀 및 의회 문자열
+6. `CHAR` — 루트 `CHAR.DAT`
+
+`build_names.py`, `build_vmnames.py`, `build_char.py`에도 코드 지문 기록을 추가했고,
+`build_dlc.py`와 `verify_iso.py`는 위 6개 지문이 하나라도 다르면 실패한다.
+`verify_iso.py`는 ISO 안의 `NAME.DAT`, `START_VM_JP.LZS`를 현재 빌드 산출물과
+직접 비교한다. 최종 ISO의 START 글꼴 3종도 현재 빌드와 정확히 일치한다.
+
+```
+fontB.fnt       eeeba68521061e2d93decf8db9c50beb797f7d6ee9ee3f7411b646c48f9acc3a
+fontB.ftd       6e964a20abde6afd802266d1a530892803d3583c96520a846152b2e465463ee8
+FontB0000.txp   b231b5897a6b884f6b59ebaa9f19d20fcb4cb137db4aa5e9dc9dcd1b0b5251a7
+```
+
+### 37-4. PPSSPP RAM 실측
+
+PPSSPP WebSocket 디버거를 읽기 전용으로 연결해 실제 유효 RAM
+`0x08000000..0x09FFFFFF` 32MB를 검색했다. 설치판 v1.20.4에는
+`memory.search`가 없어 `memory.read`를 64KB 이하 조각으로 읽는 도구를 만들었다.
+
+- `tools/ppsspp_ws_probe.ps1`
+- `tools/make_ppsspp_memory_requests.py`
+- `tools/ppsspp_memory_scan.ps1`
+- `tools/decode_memory_context.py`
+- `tools/find_code_variants.py`
+
+의회 관련 단어의 현재 코드값은 RAM에서 다수 확인됐다.
+
+| 단어 | 현재 코드값 | 20260830 이동 코드값 |
+|---|---:|---:|
+| 연무 | 7곳 | 0곳 |
+| 동굴 | 6곳 | 0곳 |
+| 게이트 | 15곳 | 0곳 |
+| 군자금 | 12곳 | 0곳 |
+| 필요해 | 4곳 | 0곳 |
+
+문장 전체는 조사 시점에 의회 화면을 벗어나 있어 RAM에 남아 있지 않았다. `열기`의
+구 코드 패턴 1곳은 주변을 직접 해독한 결과 다른 문자열의 정상 표시 `연기`였으므로,
+의회 문장 잔존 증거가 아니다. PPSSPP 메모리스틱의 SAVEDATA와 설치 DLC 68개 파일에서도
+의회 문장의 현재/이동 코드값 완전 일치는 발견되지 않았다.
+
+### 37-5. 현재 검증 결과와 남은 확인
+
+- 최종 ISO: `build_jp/D2_JP_KR.iso`
+- SHA-256: `36A427E96ECF1CA9CAF6CCB2495A916FD11A2AAD88E9E542A8B3C7330259F5D7`
+- `verify_iso.py`: 전체 통과
+- `verify_dlc.py`: 18 EDAT + PARAM.PBP 전체 통과
+- PPSSPP 설치 DLC와 `build_dlc/ULJS00183_KR` 해시 일치
+- 사용자 인게임 확인: **새 게임 범용 유닛 이름 정상 표시**
+- 의회 문자열: ISO와 RAM 정적 검증 정상, **현재 진행 데이터로 해당 의제를 열 수 없어
+  인게임 육안 확인은 보류**
+
+의회 화면이 가능한 세이브가 생기면 그 화면에서 멈춘 채
+`tools/ppsspp_memory_scan.ps1`로 문장 전체를 다시 검색한다. 육안 확인 전에는 의회 항목을
+완전 통과로 기록하지 않는다.
+
+### 37-6. 릴리즈 주의
+
+기존 `release_v20260830/`와 `D2_Korean_v20260830.zip`은 이 코드표 고정 전에 만든
+산출물이므로 **최종 배포물로 사용하지 않는다.** 현재 ISO/DLC를 기준으로 ISO ranges,
+DLC 그룹 xdelta, 매니페스트와 통합 패처 sidecar를 다시 생성한 뒤 새 릴리즈 이름으로
+검증해야 한다.
