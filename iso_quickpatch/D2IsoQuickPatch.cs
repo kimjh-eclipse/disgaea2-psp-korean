@@ -27,6 +27,8 @@ internal static class D2IsoQuickPatch
 {
     private const string VersionText = "v20260831";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
+    private const string SaveMapName = "D2_SAVE_codemap.bin";
+    private const string SaveMapMagic = "D2SAVMAP1";
     private const string PackMagic = "D2PSPRNG1";
     private const int FormatVersion = 1;
     private const int HashSize = 32;
@@ -748,6 +750,145 @@ internal static class D2IsoQuickPatch
         }
     }
 
+
+    // ---------- 세이브 글자 복구 ----------
+    //
+    // 아이템 이름은 세이브에 **문자열로 저장**된다. v20260830 은 폰트 코드 위치가
+    // 자동 재배치된 빌드였고, 그때 얻은 아이템은 그 시점 코드 바이트로 세이브에
+    // 박혔다. v20260831 에서 코드 위치를 되돌렸으므로 그 바이트가 엉뚱한 글자로
+    // 그려진다(젓례읖 맞토 = 정령의 망토). ISO·DLC 는 정상이다.
+    //
+    // ★ 대상은 **평문** 세이브다. PSP 세이브는 기본적으로 암호화되어 있어
+    //   PPSSPP 설정에서 EncryptSave 를 끄고 새 슬롯에 저장한 파일이어야 한다.
+
+    private static Dictionary<int, int> LoadSaveMap(Action<string> log)
+    {
+        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        string[] cands = new string[]
+        {
+            string.IsNullOrEmpty(exeDir) ? SaveMapName : Path.Combine(exeDir, SaveMapName),
+            Path.Combine(Directory.GetCurrentDirectory(), SaveMapName),
+        };
+        string path = null;
+        foreach (string c in cands) if (File.Exists(c)) { path = c; break; }
+        if (path == null)
+            throw new FileNotFoundException(
+                "세이브 복구 데이터가 없습니다: " + SaveMapName + "\n\n" +
+                "patcher 폴더의 파일들을 함께 두세요.");
+
+        using (FileStream fs = File.OpenRead(path))
+        using (BinaryReader r = new BinaryReader(fs, Encoding.UTF8))
+        {
+            if (Encoding.ASCII.GetString(r.ReadBytes(SaveMapMagic.Length)) != SaveMapMagic)
+                throw new InvalidDataException("세이브 복구 데이터 형식이 올바르지 않습니다.");
+            r.ReadInt32();
+            int tl = r.ReadUInt16();
+            string title = Encoding.UTF8.GetString(r.ReadBytes(tl));
+            log(title);
+            int n = r.ReadInt32();
+            Dictionary<int, int> map = new Dictionary<int, int>(n);
+            for (int i = 0; i < n; i++)
+            {
+                int o1 = r.ReadByte(), o2 = r.ReadByte();
+                int n1 = r.ReadByte(), n2 = r.ReadByte();
+                map[(o1 << 8) | o2] = (n1 << 8) | n2;
+            }
+            log(string.Format(CultureInfo.InvariantCulture, "코드 매핑 {0:N0}쌍", map.Count));
+            return map;
+        }
+    }
+
+    // 암호화된 세이브인지 — 0x00 이 거의 없고 바이트 분포가 균일하면 암호문이다.
+    private static bool LooksEncrypted(byte[] d)
+    {
+        if (d.Length == 0) return false;
+        int[] c = new int[256];
+        foreach (byte b in d) c[b]++;
+        int distinct = 0;
+        foreach (int v in c) if (v > 0) distinct++;
+        double zero = (double)c[0] / d.Length;
+        return zero < 0.03 && distinct > 250;
+    }
+
+    private static void FixSave(string path, bool apply, Action<string> log)
+    {
+        Dictionary<int, int> map = LoadSaveMap(log);
+        log(string.Empty);
+
+        if (!File.Exists(path))
+            throw new FileNotFoundException("세이브를 찾을 수 없습니다: " + path);
+        byte[] data = File.ReadAllBytes(path);
+        log(string.Format(CultureInfo.InvariantCulture,
+            "대상: {0} ({1:N0}B)", Path.GetFileName(path), data.Length));
+
+        // ★★ 두 번 돌리면 세이브가 망가진다.
+        //   구 코드표와 새 코드표는 대체로 같은 글자 집합의 **순열**이라, 어떤 글자의
+        //   새 코드가 다른 글자의 구 코드와 겹친다. 그래서 한 번 고친 파일에 다시
+        //   돌리면 또 바뀌어 버린다(검증에서 확인: 고친 뒤에도 "바꿀 글자 20자").
+        //   백업 존재를 1회성 표시로 쓴다.
+        string guardBak = path + ".d2bak";
+        if (File.Exists(guardBak))
+        {
+            log(string.Empty);
+            log("이 세이브는 이미 복구했습니다 (" + Path.GetFileName(guardBak) + " 있음).");
+            log("두 번 고치면 글자가 다시 깨지므로 진행하지 않습니다.");
+            log("처음 상태로 돌리려면 백업 파일을 되돌린 뒤 다시 시도하세요.");
+            return;
+        }
+
+        if (LooksEncrypted(data))
+            throw new InvalidDataException(
+                "암호화된 세이브입니다 — 이 기능으로는 고칠 수 없습니다.\n\n" +
+                "PPSSPP 설정에서 저장 데이터 암호화(EncryptSave)를 끄고,\n" +
+                "게임에서 새 슬롯에 저장한 뒤 그 DATA.BIN 을 지정하세요.");
+
+        // ★ 문자 경계를 지켜 치환한다. 바이트를 1칸씩 밀며 짝을 맞추면 인접 두
+        //   글자에 걸친 쌍이 우연히 일치해 엉뚱한 글자로 바뀐다(검증에서 확인).
+        //   한글 코드의 선행바이트는 0xF0~0xFC 이고 한 글자는 항상 2바이트다.
+        int changed = 0, kept = 0;
+        for (int i = 0; i < data.Length; )
+        {
+            byte b = data[i];
+            if (b >= 0xF0 && b <= 0xFC && i + 1 < data.Length)
+            {
+                int key = (b << 8) | data[i + 1];
+                int rep;
+                if (map.TryGetValue(key, out rep))
+                {
+                    data[i] = (byte)(rep >> 8);
+                    data[i + 1] = (byte)(rep & 0xFF);
+                    changed++;
+                }
+                else kept++;
+                i += 2;
+            }
+            else i += 1;
+        }
+
+        log(string.Format(CultureInfo.InvariantCulture,
+            "바꿀 글자 {0:N0}자 / 그대로 둘 글자 {1:N0}자", changed, kept));
+
+        if (changed == 0)
+        {
+            log(string.Empty);
+            log("바꿀 것이 없습니다. 이미 정상이거나 대상이 아닌 세이브입니다.");
+            return;
+        }
+        if (!apply)
+        {
+            log(string.Empty);
+            log("확인만 했습니다. 실제로 고치려면 [세이브 글자 고치기] 를 누르세요.");
+            return;
+        }
+
+        File.Copy(path, guardBak);
+        log("백업: " + Path.GetFileName(guardBak));
+        File.WriteAllBytes(path, data);
+        log(string.Empty);
+        log("완료. 세이브 글자를 복구했습니다.");
+        log("게임에서 불러와 아이템 이름을 확인하세요.");
+    }
+
     // ---------- 진입점 ----------
 
     [STAThread]
@@ -756,6 +897,8 @@ internal static class D2IsoQuickPatch
         bool cli = false;
         string iso = null;
         string dlc = null;
+        string fixsave = null;
+        bool fixsaveDry = false;
         Mode mode = Mode.Patch;
         for (int i = 0; i < args.Length; i++)
         {
@@ -767,6 +910,17 @@ internal static class D2IsoQuickPatch
             {
                 cli = true;
                 dlc = args[++i];
+            }
+            else if (a == "--fixsave" && i + 1 < args.Length)
+            {
+                cli = true;
+                fixsave = args[++i];
+            }
+            else if (a == "--checksave" && i + 1 < args.Length)
+            {
+                cli = true;
+                fixsave = args[++i];
+                fixsaveDry = true;
             }
             else if (iso == null) iso = a;
         }
@@ -782,11 +936,18 @@ internal static class D2IsoQuickPatch
         AttachConsole(AttachParentProcess);
         try
         {
+            if (fixsave != null)
+            {
+                FixSave(fixsave, !fixsaveDry, Console.WriteLine);
+                return 0;
+            }
             if (iso == null)
             {
                 Console.WriteLine(
                     "사용: D2_Korean_QuickPatch.exe <ISO> [--dlc <ULJS00183 폴더>] " +
-                    "[--verify|--restore]");
+                    "[--verify|--restore]\n" +
+                    "      D2_Korean_QuickPatch.exe --checksave <DATA.BIN>   (확인만)\n" +
+                    "      D2_Korean_QuickPatch.exe --fixsave <DATA.BIN>     (복구)");
                 return 2;
             }
             if (mode == Mode.Restore)
