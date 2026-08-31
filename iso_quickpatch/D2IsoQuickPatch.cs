@@ -25,7 +25,7 @@ using System.Windows.Forms;
 //   rangeCount x { u64 offset, u32 length, length bytes }
 internal static class D2IsoQuickPatch
 {
-    private const string VersionText = "v20260831";
+    private const string VersionText = "v20260901";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
     private const string SaveMapName = "D2_SAVE_codemap.bin";
     private const string SaveMapMagic = "D2SAVMAP1";
@@ -652,22 +652,25 @@ internal static class D2IsoQuickPatch
             // v20260830 에서 얻은 아이템은 이름이 세이브에 그 시점 코드로 박혀 있어
             // 코드표를 되돌린 뒤 깨져 보인다. ISO 는 정상이므로 세이브만 고치면 된다.
             GroupBox saveGroup = new GroupBox();
-            saveGroup.Text = "세이브 글자 복구 (v20260830 에서 얻은 아이템 이름이 깨져 보일 때)";
-            saveGroup.SetBounds(12, 168, 718, 116);
+            saveGroup.Text = "세이브 글자 복구 — 평문 세이브 전용 (v20260830 에서 얻은 아이템 이름이 깨져 보일 때)";
+            saveGroup.SetBounds(12, 168, 718, 132);
             Controls.Add(saveGroup);
 
             Label saveHint = new Label();
-            saveHint.Text = "PPSSPP 설정에서 저장 데이터 암호화를 끄고 새 슬롯에 저장한 뒤,"
+            // ★ 제약을 안내문에 명시한다. 평문 세이브만 고칠 수 있고, 대부분의
+            //   사용자 세이브는 암호화 상태라 사전 작업이 반드시 필요하다.
+            saveHint.Text = "평문 세이브만 고칠 수 있습니다. 암호화된 세이브는 진행되지 않습니다." + "\r\n"
+                          + "PPSSPP 설정에서 저장 데이터 암호화를 끄고 새 슬롯에 저장한 뒤,"
                           + " 그 DATA.BIN 을 지정하세요.";
-            saveHint.SetBounds(12, 20, 690, 18);
+            saveHint.SetBounds(12, 18, 700, 36);
             saveGroup.Controls.Add(saveHint);
 
-            saveBox.SetBounds(12, 42, 580, 24);
+            saveBox.SetBounds(12, 60, 580, 24);
             saveGroup.Controls.Add(saveBox);
 
             Button saveBrowse = new Button();
             saveBrowse.Text = "찾기";
-            saveBrowse.SetBounds(600, 41, 100, 26);
+            saveBrowse.SetBounds(600, 59, 100, 26);
             saveBrowse.Click += delegate
             {
                 using (OpenFileDialog dlg = new OpenFileDialog())
@@ -680,19 +683,19 @@ internal static class D2IsoQuickPatch
             saveGroup.Controls.Add(saveBrowse);
 
             saveCheckBtn.Text = "세이브 확인";
-            saveCheckBtn.SetBounds(12, 74, 130, 30);
+            saveCheckBtn.SetBounds(12, 92, 130, 30);
             saveCheckBtn.Click += delegate { StartSaveFix(false); };
             saveGroup.Controls.Add(saveCheckBtn);
 
             saveFixBtn.Text = "세이브 글자 고치기";
-            saveFixBtn.SetBounds(152, 74, 170, 30);
+            saveFixBtn.SetBounds(152, 92, 170, 30);
             saveFixBtn.Click += delegate { StartSaveFix(true); };
             saveGroup.Controls.Add(saveFixBtn);
 
-            bar.SetBounds(12, 294, 718, 18);
+            bar.SetBounds(12, 310, 718, 18);
             Controls.Add(bar);
 
-            logBox.SetBounds(12, 322, 718, 328);
+            logBox.SetBounds(12, 338, 718, 312);
             logBox.Multiline = true;
             logBox.ReadOnly = true;
             logBox.ScrollBars = ScrollBars.Vertical;
