@@ -559,12 +559,15 @@ internal static class D2IsoQuickPatch
         private readonly Button patchBtn = new Button();
         private readonly Button verifyBtn = new Button();
         private readonly Button restoreBtn = new Button();
+        private readonly TextBox saveBox = new TextBox();
+        private readonly Button saveCheckBtn = new Button();
+        private readonly Button saveFixBtn = new Button();
 
         public MainForm(string initialIso)
         {
             Text = "디스가이아 2 PORTABLE 한국어화 패처 " + VersionText;
             Width = 760;
-            Height = 600;
+            Height = 700;
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("맑은 고딕", 9F);
             AllowDrop = true;
@@ -579,6 +582,9 @@ internal static class D2IsoQuickPatch
                 if (files.Length > 0)
                 {
                     if (Directory.Exists(files[0])) dlcBox.Text = files[0];
+                    else if (Path.GetFileName(files[0]).Equals(
+                                 "DATA.BIN", StringComparison.OrdinalIgnoreCase))
+                        saveBox.Text = files[0];
                     else isoBox.Text = files[0];
                 }
             };
@@ -641,10 +647,52 @@ internal static class D2IsoQuickPatch
             restoreBtn.Click += delegate { StartRestore(); };
             Controls.Add(restoreBtn);
 
-            bar.SetBounds(12, 168, 718, 18);
+            // ---- 세이브 글자 복구 ----
+            //
+            // v20260830 에서 얻은 아이템은 이름이 세이브에 그 시점 코드로 박혀 있어
+            // 코드표를 되돌린 뒤 깨져 보인다. ISO 는 정상이므로 세이브만 고치면 된다.
+            GroupBox saveGroup = new GroupBox();
+            saveGroup.Text = "세이브 글자 복구 (v20260830 에서 얻은 아이템 이름이 깨져 보일 때)";
+            saveGroup.SetBounds(12, 168, 718, 116);
+            Controls.Add(saveGroup);
+
+            Label saveHint = new Label();
+            saveHint.Text = "PPSSPP 설정에서 저장 데이터 암호화를 끄고 새 슬롯에 저장한 뒤,"
+                          + " 그 DATA.BIN 을 지정하세요.";
+            saveHint.SetBounds(12, 20, 690, 18);
+            saveGroup.Controls.Add(saveHint);
+
+            saveBox.SetBounds(12, 42, 580, 24);
+            saveGroup.Controls.Add(saveBox);
+
+            Button saveBrowse = new Button();
+            saveBrowse.Text = "찾기";
+            saveBrowse.SetBounds(600, 41, 100, 26);
+            saveBrowse.Click += delegate
+            {
+                using (OpenFileDialog dlg = new OpenFileDialog())
+                {
+                    dlg.Title = "평문 DATA.BIN 선택";
+                    dlg.Filter = "PSP 세이브 (DATA.BIN)|DATA.BIN|모든 파일 (*.*)|*.*";
+                    if (dlg.ShowDialog(this) == DialogResult.OK) saveBox.Text = dlg.FileName;
+                }
+            };
+            saveGroup.Controls.Add(saveBrowse);
+
+            saveCheckBtn.Text = "세이브 확인";
+            saveCheckBtn.SetBounds(12, 74, 130, 30);
+            saveCheckBtn.Click += delegate { StartSaveFix(false); };
+            saveGroup.Controls.Add(saveCheckBtn);
+
+            saveFixBtn.Text = "세이브 글자 고치기";
+            saveFixBtn.SetBounds(152, 74, 170, 30);
+            saveFixBtn.Click += delegate { StartSaveFix(true); };
+            saveGroup.Controls.Add(saveFixBtn);
+
+            bar.SetBounds(12, 294, 718, 18);
             Controls.Add(bar);
 
-            logBox.SetBounds(12, 196, 718, 350);
+            logBox.SetBounds(12, 322, 718, 328);
             logBox.Multiline = true;
             logBox.ReadOnly = true;
             logBox.ScrollBars = ScrollBars.Vertical;
@@ -675,6 +723,7 @@ internal static class D2IsoQuickPatch
         {
             if (InvokeRequired) { BeginInvoke((Action<bool>)SetBusy, busy); return; }
             patchBtn.Enabled = verifyBtn.Enabled = restoreBtn.Enabled = !busy;
+            saveCheckBtn.Enabled = saveFixBtn.Enabled = !busy;
         }
 
         private void Start(Mode mode)
@@ -704,6 +753,41 @@ internal static class D2IsoQuickPatch
                 }
                 catch (Exception ex) { Log(string.Empty); Log("오류: " + ex.Message); }
                 finally { SetBusy(false); }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private void StartSaveFix(bool apply)
+        {
+            string path = saveBox.Text.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                MessageBox.Show(this, "세이브 파일(DATA.BIN)을 지정하세요.", "안내",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (apply)
+            {
+                DialogResult r = MessageBox.Show(
+                    this,
+                    "세이브 파일을 수정합니다.\n\n" +
+                    "원본은 <파일이름>.d2bak 으로 백업합니다.\n" +
+                    "한 번만 실행해야 하며, 두 번 고치면 글자가 다시 깨집니다.\n\n" +
+                    "계속하시겠습니까?",
+                    "세이브 글자 고치기", MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Warning);
+                if (r != DialogResult.OK) return;
+            }
+
+            SetBusy(true);
+            SetProgress(0);
+            logBox.Clear();
+            Thread t = new Thread(delegate()
+            {
+                try { FixSave(path, apply, Log); }
+                catch (Exception ex) { Log(string.Empty); Log("오류: " + ex.Message); }
+                finally { SetBusy(false); SetProgress(100); }
             });
             t.IsBackground = true;
             t.Start();
