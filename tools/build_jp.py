@@ -13,6 +13,59 @@ from textio2 import rebuild as rebuild_block
 import talkfile, glob as _glob, importlib.util as _ilu
 import krtext, recdat
 
+def fixed_cell_text(text):
+    """2바이트 고정 셀 렌더러용 문자열.
+
+    magic.dat의 직업/캐릭터 설명 화면은 한 글자를 2바이트씩 읽는다.
+    ASCII가 섞이면 다음 한글의 첫 바이트와 한 쌍이 되어 글리프가 깨지므로
+    공백과 ASCII 인쇄 문자를 Shift-JIS 전각 문자로 바꾼다.
+    """
+    out=[]
+    for ch in text:
+        code=ord(ch)
+        if ch == ' ':
+            out.append('\u3000')
+        elif 0x21 <= code <= 0x7e:
+            out.append(chr(code + 0xfee0))
+        else:
+            out.append(ch)
+    return ''.join(out)
+
+
+def patch_eboot_aptitude_names(blob):
+    """캐릭터 생성 화면이 직접 참조하는 EBOOT 내 소질명 5단계를 번역한다.
+
+    각 항목은 이름 22바이트 + 수치 4바이트의 0x1A바이트 레코드다.
+    script00에도 같은 문구가 있지만 이 선택 화면은 그 복제본을 사용하지 않는다.
+    """
+    names = (
+        ('どうしようもないクズ', '답 없는 쓰레기'),
+        ('おちこぼれ', '낙오자'),
+        ('平凡', '평범'),
+        ('優秀', '우수'),
+        ('極めて優秀', '극히 우수'),
+        ('天才', '천재'),
+    )
+    out = bytearray(blob)
+    anchor = names[0][0].encode('cp932')
+    base = bytes(out).find(anchor)
+    if base < 0 or bytes(out).find(anchor, base + 1) >= 0:
+        raise SystemExit('EBOOT 소질명 배열 기준 위치 불일치')
+    starts = []
+    for index, (old, new) in enumerate(names):
+        old_raw = old.encode('cp932')
+        at = base + index * 0x1a
+        field = bytes(out[at:at + 22]).split(b'\0', 1)[0]
+        if field != old_raw:
+            raise SystemExit(f'EBOOT 소질명 레코드 불일치: {old!r} @ {at:#x}')
+        new_raw = krtext.encode(new)
+        if len(new_raw) > 22:
+            raise SystemExit(f'EBOOT 소질명 필드 초과: {old} -> {new}')
+        # 원문 뒤의 NUL 패딩까지만 교체하여 바로 뒤 4바이트 수치를 보존한다.
+        out[at:at + 22] = new_raw + bytes(22 - len(new_raw))
+        starts.append(at)
+    return bytes(out), names, starts
+
 # START_JP 를 249886 으로 민 최종 레이아웃 — 전량 전각화 SCRIPTPACK(3,484,323B)에 자리를 내준다.
 # build_talk.ISO_NEXT 와 같아야 한다. 패치된 EBOOT(talk 버퍼 0x36000) 전제.
 JP_ISO_LBA, JP_ISO_NEXT = 249886, 252272
@@ -22,8 +75,13 @@ def load_edits(path):
     out={}
     with open(path,encoding='utf-8') as f:
         for row in csv.DictReader(f,delimiter='\t'):
-            if row['ko'].strip():
-                out[int(row['id'],16)]=row['ko'].strip()
+            ko=row['ko'].strip()
+            # 공용 조사처럼 의도적으로 문자열 자체를 제거해야 하는 항목.
+            # 빈 TSV 셀은 미번역과 구별되지 않으므로 명시적 표식을 사용한다.
+            if ko == '<EMPTY>':
+                out[int(row['id'],16)]=''
+            elif ko:
+                out[int(row['id'],16)]=ko
     return out
 
 def main(make_iso=False):
@@ -115,7 +173,10 @@ def main(make_iso=False):
             if not any(ord(c)>0x7f for c in jp): continue
             ko=RT.get(jp)
             if ko is None: miss.add(jp); continue
-            b=krtext.encode(ko)
+            # magic.dat 설명은 2바이트 고정 셀 렌더러를 사용한다.
+            # 일반 ASCII를 그대로 넣으면 바이트 경계가 어긋나 이후 글리프가 깨진다.
+            stored_ko=fixed_cell_text(ko) if nm.lower()=='magic.dat' else ko
+            b=krtext.encode(stored_ko)
             # ★ 예산은 선언 폭이 아니라 **레코드별 실제 용량**이다.
             #   문자열 뒤가 바이너리인 필드가 있어서(HABIT/dungeon/mitem) 폭을
             #   그대로 쓰면 무기 종류·사거리를 덮어쓴다. recdat.capacity 주석 참고.
@@ -196,6 +257,9 @@ def main(make_iso=False):
             raise SystemExit(1)
         eb=open(ebp,'rb').read()
         assert eb[:4]==b'ELF', 'EBOOT_KR.BIN 이 ELF 가 아니다'
+        eb, aptitude_names, aptitude_offsets = patch_eboot_aptitude_names(eb)
+        print('EBOOT 소질명: ' + ', '.join(new for _old,new in aptitude_names))
+        print('EBOOT 소질명 위치: ' + ', '.join(f'{x:#x}' for x in aptitude_offsets))
         from psp_prx_type1 import encrypt_prx, decrypt_prx
         orig_enc=open('jp/EBOOT_orig_enc.BIN','rb').read()
         limit=len(decrypt_prx(orig_enc))

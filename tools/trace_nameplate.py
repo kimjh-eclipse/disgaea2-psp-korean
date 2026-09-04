@@ -13,6 +13,8 @@ import base64
 import sys
 
 from ppsspp_dbg import Dbg
+from ppsspp_ws import ws_send
+import krtext
 
 RAM_START = 0x08800000
 RAM_END = 0x0A000000
@@ -21,8 +23,11 @@ CHUNK = 0x00100000
 
 def pause(d):
     status = d.req({'event': 'cpu.status'})
-    if not status.get('stepping'):
-        d.req({'event': 'cpu.stepping'})
+    if not status.get('stepping') and not status.get('paused'):
+        # PPSSPP 1.20.x의 stepping/resume은 즉시 ticket 응답을 주지 않는
+        # 비동기 명령이다. req()로 기다리면 영원히 대기하므로 broadcast를 받는다.
+        ws_send(d.s, {'event': 'cpu.stepping'})
+        d.wait_event('cpu.stepping', timeout=5)
 
 
 def scan(d, needle):
@@ -42,7 +47,10 @@ def scan(d, needle):
 
 def main():
     text = sys.argv[1] if len(sys.argv) > 1 else 'ママ'
-    needle = text.encode('cp932')
+    # 한글 패치 문자열도 그대로 추적할 수 있게 게임 전용 인코더를 사용한다.
+    # 원문 일본어는 기존과 같이 CP932로 처리한다.
+    needle = (krtext.encode(text) if any('\uac00' <= ch <= '\ud7a3' for ch in text)
+              else text.encode('cp932'))
     d = Dbg()
     print(d.req({'event': 'game.status'}))
     pause(d)

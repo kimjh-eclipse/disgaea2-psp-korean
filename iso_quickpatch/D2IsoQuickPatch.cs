@@ -25,10 +25,14 @@ using System.Windows.Forms;
 //   rangeCount x { u64 offset, u32 length, length bytes }
 internal static class D2IsoQuickPatch
 {
-    private const string VersionText = "v20260901";
+    private const string VersionText = "v20260904";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
     private const string SaveMapName = "D2_SAVE_codemap.bin";
     private const string SaveMapMagic = "D2SAVMAP1";
+    private const string AssemblyMapName = "D2_SAVE_assemblymap.bin";
+    private const string AssemblyMapMagic = "D2ASMMAP1";
+    private const string SaveCryptoName = "D2_SAVE_crypto.exe";
+    private const string SaveCryptoKey = "DISGAEA120060528";
     private const string PackMagic = "D2PSPRNG1";
     private const int FormatVersion = 1;
     private const int HashSize = 32;
@@ -71,19 +75,19 @@ internal static class D2IsoQuickPatch
     {
         new DlcGroup(0, 4, "00",
             "FE96431E2881A3A3166163BE46FC3977A78731814E441D775E07D7C2F7ED3AED",
-            "53871B36E8CCF46D7E4E88AC13AF1E9ABE7DE3E2AFBB03441BAB8A0FBAC46FF8"),
+            "159B14C15561D860E4CE01B281D7E32738D1A3F1C3535D28F2C25AE56C160387"),
         new DlcGroup(5, 8, "05",
             "3A43D79E4CC5D2DB32F1282EB7C072A39BFD2F8C603B1F8B3A1FA7CD23B26C3D",
-            "455900F88064E643346B38B46049733CB4238CD283C048EF039CC0D25467CD3A"),
+            "A354481FC554E3A748A1668093EE62BCEA0DFB2B159C81F0BD6FD070A6CA82E9"),
         new DlcGroup(9, 12, "09",
             "605ABE5F19D02744EF2F17582E2E9009CC490AFA513CB0BB9379DE643E205FB8",
-            "0E4D20E3FE24A457281AC51184C3A5D2EE54E3AC5B8EF31CE9AA9C48185B4206"),
+            "9FB1D9D8926FF3404C8B5C6C8BA9F74AA47C48D6160133DF242EA7D919D37684"),
         new DlcGroup(13, 16, "13",
             "C93C1B70F8615AFCCF51E83EA17D99BA4C9A2952986F75D21AAE1B22E181E52F",
-            "87A41F630750288F821B11BD02FD00CBDD5F17FF68E42A0499DB2EC1CD0784C4"),
+            "A8AE280F8E0E18159E9DDD904A0AA583E67723E82C8FEBCCF9BD59AFAC1779F4"),
         new DlcGroup(17, 17, "17",
             "C0FC7185C43FC1D7D307E4AFE2F1B518AE95A2F4B5E21CD458B5950C6EC232B0",
-            "18640CBCA301946705939DBAAFD0F10FD38ADCB97C78F5B4AB6419116426FF7A"),
+            "230090E5558C051AE920A4A5D050F0BA2F2FBE28C02B13E1E2DD1992C3312A54"),
     };
 
     // ---------- 리소스 ----------
@@ -405,7 +409,7 @@ internal static class D2IsoQuickPatch
         if (File.Exists(first)) return first;
         string second = Path.Combine(Directory.GetCurrentDirectory(), name);
         if (File.Exists(second)) return second;
-        throw new FileNotFoundException("DLC 패치 구성 파일을 찾을 수 없습니다: " + name);
+        throw new FileNotFoundException("패처 구성 파일을 찾을 수 없습니다: " + name);
     }
 
     private static string Q(string value)
@@ -562,12 +566,13 @@ internal static class D2IsoQuickPatch
         private readonly TextBox saveBox = new TextBox();
         private readonly Button saveCheckBtn = new Button();
         private readonly Button saveFixBtn = new Button();
+        private readonly Button saveAssemblyBtn = new Button();
 
         public MainForm(string initialIso)
         {
             Text = "디스가이아 2 PORTABLE 한국어화 패처 " + VersionText;
             Width = 760;
-            Height = 700;
+            Height = 735;
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("맑은 고딕", 9F);
             AllowDrop = true;
@@ -652,8 +657,8 @@ internal static class D2IsoQuickPatch
             // v20260830 에서 얻은 아이템은 이름이 세이브에 그 시점 코드로 박혀 있어
             // 코드표를 되돌린 뒤 깨져 보인다. ISO 는 정상이므로 세이브만 고치면 된다.
             GroupBox saveGroup = new GroupBox();
-            saveGroup.Text = "세이브 글자 복구 — 평문 세이브 전용 (v20260830 에서 얻은 아이템 이름이 깨져 보일 때)";
-            saveGroup.SetBounds(12, 168, 718, 132);
+            saveGroup.Text = "기존 세이브 보정";
+            saveGroup.SetBounds(12, 168, 718, 164);
             Controls.Add(saveGroup);
 
             Label saveHint = new Label();
@@ -692,10 +697,20 @@ internal static class D2IsoQuickPatch
             saveFixBtn.Click += delegate { StartSaveFix(true); };
             saveGroup.Controls.Add(saveFixBtn);
 
-            bar.SetBounds(12, 310, 718, 18);
+            saveAssemblyBtn.Text = "의원명 한국어화";
+            saveAssemblyBtn.SetBounds(332, 92, 170, 30);
+            saveAssemblyBtn.Click += delegate { StartAssemblyFix(); };
+            saveGroup.Controls.Add(saveAssemblyBtn);
+
+            Label assemblyHint = new Label();
+            assemblyHint.Text = "※ 의원명 한국어화는 암호화된 PPSSPP/PSP 세이브도 직접 처리합니다.";
+            assemblyHint.SetBounds(12, 126, 680, 22);
+            saveGroup.Controls.Add(assemblyHint);
+
+            bar.SetBounds(12, 342, 718, 18);
             Controls.Add(bar);
 
-            logBox.SetBounds(12, 338, 718, 312);
+            logBox.SetBounds(12, 370, 718, 310);
             logBox.Multiline = true;
             logBox.ReadOnly = true;
             logBox.ScrollBars = ScrollBars.Vertical;
@@ -727,6 +742,7 @@ internal static class D2IsoQuickPatch
             if (InvokeRequired) { BeginInvoke((Action<bool>)SetBusy, busy); return; }
             patchBtn.Enabled = verifyBtn.Enabled = restoreBtn.Enabled = !busy;
             saveCheckBtn.Enabled = saveFixBtn.Enabled = !busy;
+            saveAssemblyBtn.Enabled = !busy;
         }
 
         private void Start(Mode mode)
@@ -789,6 +805,37 @@ internal static class D2IsoQuickPatch
             Thread t = new Thread(delegate()
             {
                 try { FixSave(path, apply, Log); }
+                catch (Exception ex) { Log(string.Empty); Log("오류: " + ex.Message); }
+                finally { SetBusy(false); SetProgress(100); }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private void StartAssemblyFix()
+        {
+            string path = saveBox.Text.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                MessageBox.Show(this, "세이브 파일(DATA.BIN)을 지정하세요.", "안내",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            DialogResult r = MessageBox.Show(
+                this,
+                "기존 세이브에 저장된 암흑의회 의원명 64개를 한국어로 바꿉니다.\n\n" +
+                "암호화 세이브는 PARAM.SFO도 함께 갱신하며, 원본 두 파일은 백업합니다.\n\n" +
+                "계속하시겠습니까?",
+                "의원명 한국어화", MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning);
+            if (r != DialogResult.OK) return;
+
+            SetBusy(true);
+            SetProgress(0);
+            logBox.Clear();
+            Thread t = new Thread(delegate()
+            {
+                try { FixAssemblySave(path, true, Log); }
                 catch (Exception ex) { Log(string.Empty); Log("오류: " + ex.Message); }
                 finally { SetBusy(false); SetProgress(100); }
             });
@@ -976,6 +1023,211 @@ internal static class D2IsoQuickPatch
         log("게임에서 불러와 아이템 이름을 확인하세요.");
     }
 
+    // ---------- 기존 세이브의 암흑의회 의원명 한국어화 ----------
+    //
+    // 의원 64명의 이름은 최초 생성 뒤 DATA.BIN 안에 문자열로 보존된다. 따라서
+    // START_VM의 원본 이름표를 번역해도 이미 만들어진 세이브에는 소급되지 않는다.
+    // 이 경로는 ULJS00183의 mode-5 게임 키로 암호화된 DATA.BIN을 복호화하고,
+    // 32바이트 레코드 배열의 16바이트 이름 필드만 바꾼 뒤 PARAM.SFO까지 다시 만든다.
+
+    private sealed class AssemblyMapEntry
+    {
+        public byte[] OldName;
+        public byte[] NewName;
+    }
+
+    private static List<AssemblyMapEntry> LoadAssemblyMap(Action<string> log)
+    {
+        string path = SidecarPath(AssemblyMapName);
+        using (FileStream fs = File.OpenRead(path))
+        using (BinaryReader r = new BinaryReader(fs, Encoding.UTF8))
+        {
+            if (Encoding.ASCII.GetString(r.ReadBytes(AssemblyMapMagic.Length)) != AssemblyMapMagic)
+                throw new InvalidDataException("의원명 치환표 형식이 올바르지 않습니다.");
+            int version = r.ReadInt32();
+            if (version != 1)
+                throw new InvalidDataException("지원하지 않는 의원명 치환표 버전입니다: " + version);
+            int count = r.ReadInt32();
+            if (count != 64)
+                throw new InvalidDataException("의원명 치환표가 64개가 아닙니다: " + count);
+            List<AssemblyMapEntry> entries = new List<AssemblyMapEntry>(count);
+            for (int i = 0; i < count; i++)
+            {
+                entries.Add(new AssemblyMapEntry
+                {
+                    OldName = r.ReadBytes(16),
+                    NewName = r.ReadBytes(16),
+                });
+            }
+            if (fs.Position != fs.Length)
+                throw new InvalidDataException("의원명 치환표 뒤에 예상하지 못한 데이터가 있습니다.");
+            log("의원명 치환표 64개 확인");
+            return entries;
+        }
+    }
+
+    private static bool BytesAt(byte[] data, int offset, byte[] needle)
+    {
+        if (offset < 0 || offset + needle.Length > data.Length) return false;
+        for (int i = 0; i < needle.Length; i++)
+            if (data[offset + i] != needle[i]) return false;
+        return true;
+    }
+
+    private static int FindBytes(byte[] data, byte[] needle)
+    {
+        for (int at = 0; at + needle.Length <= data.Length; at++)
+            if (BytesAt(data, at, needle)) return at;
+        return -1;
+    }
+
+    private static bool SameBytes(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    private static int PatchAssemblyNames(byte[] data, List<AssemblyMapEntry> map,
+                                          Action<string> log)
+    {
+        const int stride = 0x20;
+        int first = FindBytes(data, map[0].OldName);
+        if (first < 0)
+        {
+            if (FindBytes(data, map[0].NewName) >= 0)
+            {
+                log("의원명은 이미 한국어로 변환되어 있습니다.");
+                return 0;
+            }
+            throw new InvalidDataException(
+                "의원명 배열을 찾지 못했습니다. ULJS00183의 정상 DATA.BIN인지 확인하세요.");
+        }
+
+        // 첫 이름 필드부터 0x20 간격으로 64개가 모두 원문과 맞아야만 수정한다.
+        for (int i = 0; i < map.Count; i++)
+        {
+            int at = first + i * stride;
+            if (!BytesAt(data, at, map[i].OldName))
+                throw new InvalidDataException(
+                    string.Format(CultureInfo.InvariantCulture,
+                        "의원명 배열 구조가 예상과 다릅니다 ({0}/64, 0x{1:X}).", i + 1, at));
+        }
+        for (int i = 0; i < map.Count; i++)
+            Buffer.BlockCopy(map[i].NewName, 0, data, first + i * stride, 16);
+
+        log(string.Format(CultureInfo.InvariantCulture,
+            "의원명 64/64 변환 (첫 필드 0x{0:X})", first));
+        return map.Count;
+    }
+
+    private static void RunSaveCrypto(string arguments)
+    {
+        ProcessStartInfo info = new ProcessStartInfo();
+        info.FileName = SidecarPath(SaveCryptoName);
+        info.Arguments = arguments;
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        info.RedirectStandardOutput = true;
+        info.RedirectStandardError = true;
+        using (Process process = Process.Start(info))
+        {
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidDataException(
+                    "세이브 암복호화 실패(" + process.ExitCode + ")\n" + stdout + stderr);
+        }
+    }
+
+    private static void FixAssemblySave(string path, bool apply, Action<string> log)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("세이브를 찾을 수 없습니다: " + path);
+        if (!Path.GetFileName(path).Equals("DATA.BIN", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("DATA.BIN 파일을 지정하세요.");
+
+        List<AssemblyMapEntry> map = LoadAssemblyMap(log);
+        byte[] source = File.ReadAllBytes(path);
+        bool encrypted = LooksEncrypted(source);
+        log(string.Format(CultureInfo.InvariantCulture,
+            "대상: {0} ({1:N0}B, {2})", path, source.Length,
+            encrypted ? "암호화" : "평문"));
+
+        string tempDir = Path.Combine(Path.GetTempPath(), "D2SaveFix_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string plainPath = Path.Combine(tempDir, "plain.bin");
+            string fixedPath = Path.Combine(tempDir, "fixed.bin");
+            string keyPath = Path.Combine(tempDir, "key.bin");
+            string encryptedPath = Path.Combine(tempDir, "DATA.BIN");
+            string roundtripPath = Path.Combine(tempDir, "roundtrip.bin");
+            string sfoOutPath = Path.Combine(tempDir, "PARAM.SFO");
+            File.WriteAllBytes(keyPath, Encoding.ASCII.GetBytes(SaveCryptoKey));
+
+            string sfoPath = Path.Combine(Path.GetDirectoryName(path), "PARAM.SFO");
+            if (encrypted)
+            {
+                if (!File.Exists(sfoPath))
+                    throw new FileNotFoundException("암호화 세이브와 같은 폴더에 PARAM.SFO가 없습니다.");
+                RunSaveCrypto("-d " + Q(keyPath) + " 5 " + Q(path) + " " + Q(plainPath));
+                log("mode 5 복호화 완료");
+            }
+            else
+            {
+                File.WriteAllBytes(plainPath, source);
+            }
+
+            byte[] plain = File.ReadAllBytes(plainPath);
+            int changed = PatchAssemblyNames(plain, map, log);
+            if (changed == 0) return;
+            File.WriteAllBytes(fixedPath, plain);
+            if (!apply)
+            {
+                log("확인만 했습니다. 실제 파일은 바꾸지 않았습니다.");
+                return;
+            }
+
+            string dataBackup = path + ".d2assemblybak";
+            string sfoBackup = sfoPath + ".d2assemblybak";
+            if (File.Exists(dataBackup) || (encrypted && File.Exists(sfoBackup)))
+                throw new InvalidDataException(
+                    "의원명 백업이 이미 있어 중복 적용을 중단합니다.\n" + dataBackup);
+
+            if (encrypted)
+            {
+                RunSaveCrypto("-e " + Q(keyPath) + " 5 " + Q(fixedPath) + " " +
+                    Q(encryptedPath) + " DATA.BIN " + Q(sfoPath) + " " + Q(sfoOutPath));
+                RunSaveCrypto("-d " + Q(keyPath) + " 5 " + Q(encryptedPath) + " " + Q(roundtripPath));
+                if (!SameBytes(plain, File.ReadAllBytes(roundtripPath)))
+                    throw new InvalidDataException("재암호화 왕복 검증이 일치하지 않습니다.");
+                log("재암호화 및 왕복 검증 완료");
+
+                File.Copy(path, dataBackup);
+                File.Copy(sfoPath, sfoBackup);
+                File.Copy(encryptedPath, path, true);
+                File.Copy(sfoOutPath, sfoPath, true);
+                log("백업: " + Path.GetFileName(dataBackup));
+                log("백업: " + Path.GetFileName(sfoBackup));
+            }
+            else
+            {
+                File.Copy(path, dataBackup);
+                File.Copy(fixedPath, path, true);
+                log("백업: " + Path.GetFileName(dataBackup));
+            }
+            log(string.Empty);
+            log("완료. 기존 암흑의회 의원명을 한국어로 바꿨습니다.");
+            log("게임을 완전히 재시작한 뒤 정상 세이브로 불러와 확인하세요.");
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
     // ---------- 진입점 ----------
 
     [STAThread]
@@ -986,6 +1238,8 @@ internal static class D2IsoQuickPatch
         string dlc = null;
         string fixsave = null;
         bool fixsaveDry = false;
+        string fixassembly = null;
+        bool fixassemblyDry = false;
         Mode mode = Mode.Patch;
         for (int i = 0; i < args.Length; i++)
         {
@@ -1009,6 +1263,17 @@ internal static class D2IsoQuickPatch
                 fixsave = args[++i];
                 fixsaveDry = true;
             }
+            else if (a == "--fixassembly" && i + 1 < args.Length)
+            {
+                cli = true;
+                fixassembly = args[++i];
+            }
+            else if (a == "--checkassembly" && i + 1 < args.Length)
+            {
+                cli = true;
+                fixassembly = args[++i];
+                fixassemblyDry = true;
+            }
             else if (iso == null) iso = a;
         }
 
@@ -1028,13 +1293,20 @@ internal static class D2IsoQuickPatch
                 FixSave(fixsave, !fixsaveDry, Console.WriteLine);
                 return 0;
             }
+            if (fixassembly != null)
+            {
+                FixAssemblySave(fixassembly, !fixassemblyDry, Console.WriteLine);
+                return 0;
+            }
             if (iso == null)
             {
                 Console.WriteLine(
                     "사용: D2_Korean_QuickPatch.exe <ISO> [--dlc <ULJS00183 폴더>] " +
                     "[--verify|--restore]\n" +
                     "      D2_Korean_QuickPatch.exe --checksave <DATA.BIN>   (확인만)\n" +
-                    "      D2_Korean_QuickPatch.exe --fixsave <DATA.BIN>     (복구)");
+                    "      D2_Korean_QuickPatch.exe --fixsave <DATA.BIN>     (구 코드표 복구)\n" +
+                    "      D2_Korean_QuickPatch.exe --checkassembly <DATA.BIN> (의원명 확인)\n" +
+                    "      D2_Korean_QuickPatch.exe --fixassembly <DATA.BIN>   (의원명 한국어화)");
                 return 2;
             }
             if (mode == Mode.Restore)

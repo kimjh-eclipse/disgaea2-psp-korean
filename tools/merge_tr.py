@@ -35,6 +35,8 @@ def main():
     bad_enc = []
     bad_fmt = []
     for k, v in merged.items():
+        if v == '<EMPTY>':
+            continue
         b = krtext.validate(v)
         if b: bad_enc.append((k, b, v))
         # 서식 지정자 보존 검사

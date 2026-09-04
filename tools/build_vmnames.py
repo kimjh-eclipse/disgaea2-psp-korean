@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
-"""범용 유닛 이름 풀 — 실제 출처는 `START_VM_JP.LZS` 안이다
+"""START_VM 문자열 패치 — 이름 풀/의회/도감/죄상
 
 ★ 루트 `NAME.DAT` 를 번역해도 화면은 안 바뀐다(그쪽은 미사용/다른 용도).
-  게임이 쓰는 풀은 START_VM_JP.LZS 를 해제한 이미지 안의 **NUL 종단 가변길이 문자열 블롭**.
+  게임이 쓰는 풀은 START_VM_JP.LZS 를 해제한 이미지 안에 있다.
   전투 준비 화면에 `ムサシ` `ハミルトン` `ジスカ` 가 그대로 나온 것이 이것.
 
-블롭에 오프셋 테이블이 딸려 있으므로 **각 이름의 바이트 길이를 유지**해야 한다.
-번역이 짧으면 남는 자리는 NUL 로 채운다(게임은 NUL 종단으로 읽으므로 무해).
+★★ 이 파일에는 NUL 종단 이름과, VM 명령 사이에 박힌 **고정폭 문자열**이 섞여 있다.
+예전 빌더는 `원문 + NUL`만 찾아 도감 설명의 중간 조각과 죄상명이 일본어로 남았다.
+둘 다 원래 바이트 길이를 유지해야 한다. NUL 종단 문자열의 여백은 NUL, 고정폭
+문자열의 여백은 ASCII 공백으로 채워 뒤의 VM 명령 바이트를 보존한다.
 길이를 넘는 12건은 미리 축약해 두었다(work/tr_names_*.py 주석 참고).
 
 사용: python tools/build_vmnames.py [--iso]
@@ -33,32 +35,47 @@ def main(make_iso=False):
         T.update(m.T)
         print(f'  {os.path.basename(p)}: {len(m.T)}건')
 
-    raw = bytearray(open('jp/START_VM_JP.bin', 'rb').read())
+    original = open('jp/START_VM_JP.bin', 'rb').read()
+    raw = bytearray(original)
     hits = 0
+    nul_hits = 0
+    fixed_hits = 0
     over = []
+    # 긴 키부터 처리한다. 짧은 직업명/종족명이 도감 장문 안에도 들어 있으므로
+    # 사전 순서대로 처리하면 긴 문자열을 먼저 훼손할 수 있다.
+    encoded = []
     for jp, ko in T.items():
         jb = jp.encode('cp932')
         kb = krtext.encode(ko)
         if len(kb) > len(jb):
             over.append((jp, ko, len(jb), len(kb)))
             continue
-        pat = jb + b'\0'
-        rep = kb + bytes(len(jb) - len(kb) + 1)      # 길이 동일, 남는 자리 NUL
-        assert len(pat) == len(rep)
+        encoded.append((len(jb), jp, jb, kb))
+    for _size, jp, jb, kb in sorted(encoded, reverse=True):
         i = 0
         while True:
-            j = raw.find(pat, i)
+            j = raw.find(jb, i)
             if j < 0:
                 break
-            raw[j:j + len(pat)] = rep
+            # 이미 더 긴 키의 번역으로 덮인 영역에는 원문 jb가 남지 않으므로,
+            # 여기 도달한 위치는 독립 문자열/조각이다.
+            is_nul = j + len(jb) < len(original) and original[j + len(jb)] == 0
+            pad = len(jb) - len(kb)
+            filler = bytes(pad) if is_nul else b' ' * pad
+            raw[j:j + len(jb)] = kb + filler
             hits += 1
-            i = j + len(pat)
+            if is_nul:
+                nul_hits += 1
+            else:
+                fixed_hits += 1
+            i = j + len(jb)
     if over:
         print(f'!! 원문 바이트 초과 {len(over)}건 — 축약 필요')
-        for jp, ko, a, b in over[:10]:
+        for jp, ko, a, b in over:
             print(f'   {jp} -> {ko}  {a}B -> {b}B')
         raise SystemExit(1)
-    print(f'이름 {hits}개 제자리 치환 (크기 불변 {len(raw):,}B)')
+    print(f'START_VM 문자열 {hits}개 제자리 치환 '
+          f'(NUL {nul_hits}, 고정폭 {fixed_hits}, 크기 불변 {len(raw):,}B)')
 
     c = compress(bytes(raw), 0xd5)
     assert decompress(c) == bytes(raw), 'LZS 검증 실패'

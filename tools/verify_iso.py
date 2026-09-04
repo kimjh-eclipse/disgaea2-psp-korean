@@ -9,6 +9,8 @@ sys.path.insert(0, HERE)
 from nislzs import decompress
 from textio import parse
 import scriptpack, talkfile, recdat
+import krtext
+import audit_zukan
 
 ISO = os.environ.get('D2_ISO_DST', 'build_jp/D2_JP_KR.iso')
 
@@ -79,6 +81,24 @@ def main():
     f = open(ISO, 'rb')
     ok = True
 
+    # 캐릭터 생성 소질명은 script00과 EBOOT에 각각 한 벌씩 있다.
+    # 실제 선택 화면은 EBOOT의 24바이트 고정 필드를 참조하므로 양쪽을 모두 검사한다.
+    eboot_enc, eboot_lba, eboot_size = read_iso_file(f, 24, b'EBOOT.BIN')
+    from psp_prx_type1 import decrypt_prx
+    eboot_dec = decrypt_prx(eboot_enc)
+    aptitude_jp = ('どうしようもないクズ', 'おちこぼれ', '平凡', '優秀', '極めて優秀', '天才')
+    aptitude_ko = ('답 없는 쓰레기', '낙오자', '평범', '우수', '극히 우수', '천재')
+    eboot_left = [s for s in aptitude_jp if s.encode('cp932') in eboot_dec]
+    eboot_missing = [s for s in aptitude_ko if krtext.encode(s) not in eboot_dec]
+    print(f'EBOOT.BIN      lba {eboot_lba} size {eboot_size} / '
+          f'소질명 일본어 {len(eboot_left)} / 한글 누락 {len(eboot_missing)}')
+    if eboot_left or eboot_missing:
+        ok = False
+        for s in eboot_left:
+            print(f'  !! EBOOT 일본어 소질명: {s}')
+        for s in eboot_missing:
+            print(f'  !! EBOOT 한글 소질명 누락: {s}')
+
     # --- START (폰트 + UI 문자열) ---
     lzs, lba, size = read_iso_file(f, 25, b'START_JP.LZS')
     raw = decompress(lzs)
@@ -132,14 +152,81 @@ def main():
 
     vm_lzs, vm_lba, vm_size = read_iso_file(f, 25, b'START_VM_JP.LZS')
     vm_expected = open('build_jp/START_VM_JP.LZS', 'rb').read()
-    vm_same = vm_lzs == vm_expected and decompress(vm_lzs) == decompress(vm_expected)
+    vm_raw = decompress(vm_lzs)
+    vm_same = vm_lzs == vm_expected and vm_raw == decompress(vm_expected)
     print(f'START_VM_JP    lba {vm_lba} size {vm_size} / 이름 풀 빌드 일치 {vm_same}')
     if not vm_same:
+        ok = False
+
+    # START_VM에는 NUL 종단 이름과 VM 명령 사이의 고정폭 문장이 함께 있다.
+    # 예전 빌더가 고정폭 필드를 건너뛰어 도감·의회·죄상에 일본어가 남았으므로,
+    # 실제 ISO를 풀어 해당 회귀 문구가 없는지 별도로 확인한다.
+    vm_forbidden = (
+        '専門職として認められている', '人見知りもいるようだ',
+        'あるが、この呼称', '夢はばたく議員', 'オーク太郎議員',
+        'ＨＰ多すぎの罪', 'ダメージ与えすぎの罪',
+        '病院部屋', 'プチオーク部屋', 'オーク界賊団',
+        'ゴースト変化', '虹レンジャー変化',
+    )
+    vm_left = [s for s in vm_forbidden if s.encode('cp932') in vm_raw]
+    vm_expected_ko = ('인정받고 있다', '낯가림도 있는 듯하다',
+                      '꿈나래 의원', 'ＨＰ 과다죄', '과도한 데미지의 죄',
+                      '병원 방', '프티오크 방', '오크 해적단 아지트',
+                      '고스트 변신', '니지레인저 변신')
+    vm_missing = [s for s in vm_expected_ko if krtext.encode(s) not in vm_raw]
+    print(f'  START_VM 회귀검사: 일본어 잔존 {len(vm_left)} / 한글 누락 {len(vm_missing)}')
+    if vm_left or vm_missing:
+        for s in vm_left:
+            print(f'    !! 일본어 잔존: {s}')
+        for s in vm_missing:
+            print(f'    !! 한글 누락: {s}')
+        ok = False
+
+    # 캐릭터 도감 tower.dat의 제목·설명 351개를 원문 단위로 전수 대조한다.
+    # 대표 문자열 몇 개만 검사하면 `戦士♂`처럼 한자 글리프가 빈칸으로 보이는
+    # 짧은 목록명이 다시 빠질 수 있다.
+    if audit_zukan.main():
         ok = False
 
     sc = mem['script00.dat']
     cnt, ptrs = parse(sc)
     print(f'  script00 문자열 {cnt}건')
+    script_forbidden = ('どうしようもないクズ', 'おちこぼれ')
+    script_left = [s for s in script_forbidden if s.encode('cp932') in sc]
+    script_expected = ('답 없는 쓰레기', '낙오자')
+    script_missing = [s for s in script_expected if krtext.encode(s) not in sc]
+    print(f'  소질명 회귀검사: 일본어 잔존 {len(script_left)} / 한글 누락 {len(script_missing)}')
+    if script_left or script_missing:
+        ok = False
+        for s in script_left:
+            print(f'    !! 일본어 잔존: {s}')
+        for s in script_missing:
+            print(f'    !! 한글 누락: {s}')
+    class_labels = {0x23a: '장비적성', 0x23b: '기본능력'}
+    for sid, expected in class_labels.items():
+        q = ptrs[sid]
+        e = sc.index(b'\0', q)
+        actual = dec(sc[q:e])
+        print(f'  캐릭터 상세 제목 {sid:#05x}: {actual}')
+        if actual != expected:
+            print(f'    !! 예상값: {expected}')
+            ok = False
+    # 아이템명은 직전 표시 명령이 따로 출력한다. 조사 병기는 이 렌더러에서
+    # `을(`만 남으므로 0x028은 조사 없는 완결 문장이어야 한다.
+    q028 = ptrs[0x028]
+    e028 = sc.index(b'\0', q028)
+    text028 = dec(sc[q028:e028])
+    print(f'  아이템 획득 문구: {text028}')
+    if text028 != '손에 넣었다！！':
+        print('    !! 아이템 획득 문구 회귀')
+        ok = False
+    q0b8 = ptrs[0x0b8]
+    e0b8 = sc.index(b'\0', q0b8)
+    text0b8 = dec(sc[q0b8:e0b8])
+    print(f'  아이템 획득 조사 조각: {text0b8!r}')
+    if text0b8 != '':
+        print('    !! 아이템 획득 조사 조각이 비어 있지 않음')
+        ok = False
     for sid in (0x000, 0x077, 0x394, 0x2a9, 0x3e4):
         q = ptrs[sid]; e = sc.index(b'\0', q)
         print(f'    {sid:#05x}  {dec(sc[q:e])}')
@@ -216,6 +303,34 @@ def main():
                 print(f'    !! {dec(raw)}')
         for raw in kor[:2]:
             print(f'      {dec(raw)}')
+        if nm == 'magic.dat':
+            # 이 화면은 한 글자를 2바이트 고정 셀로 읽는다. 한 바이트 ASCII가
+            # 하나라도 있으면 다음 한글과 결합되어 깨진 글리프가 된다.
+            ascii_cells = []
+            for *_, raw in it:
+                pos = 0
+                while pos < len(raw):
+                    if raw[pos] < 0x80:
+                        ascii_cells.append(raw)
+                        break
+                    pos += 2
+            print(f'      고정 셀 ASCII 잔존 {len(ascii_cells)}개')
+            if ascii_cells:
+                ok = False
+                for raw in ascii_cells[:3]:
+                    print(f'    !! 고정 셀 불일치: {dec(raw)}')
+            record = {off: raw for i, off, _w, raw in it if i == 41}
+            expected = {
+                0x00: '최전선에서　활약하는　파워　파이터．',
+                0x32: '높은　체력과　공격력을　갖췄다．',
+                0x64: '위기에　빠지면　크리티컬　데미지가　ＵＰ．',
+            }
+            for off, text in expected.items():
+                actual = dec(record.get(off, b''))
+                print(f'      직업 설명 41/{off:#04x}: {actual}')
+                if actual != text:
+                    ok = False
+                    print(f'    !! 예상값: {text}')
 
     # --- SCRIPTPACK (대사) ---
     sp, lba2, size2 = read_iso_file(f, 25, b'SCRIPTPACK.DAT')
@@ -227,6 +342,28 @@ def main():
     print(f'  talk01_jp.dat 문자열 {len(ss)}개 / 한글 포함 {len(ko)}개')
     for s in ko[:5]:
         print(f'    {dec(s)}')
+
+    # 이 렌더러는 ASCII 대괄호 한 바이트 뒤부터 문자열 경계를 잃어 제목 끝에
+    # H/w 같은 후행 바이트를 노출한다. 모든 talk를 되읽어 대표 튜토리얼 문구가
+    # 정상 동작이 확인된 【】로 패킹됐는지 검사한다.
+    talk_texts = []
+    for ent in ents2:
+        if ent['name'].startswith('talk'):
+            talk_texts.extend(dec(s) for _, s in talkfile.strings(ent['data']))
+    tutorial_expected = (
+        '【튜토리얼　아이템계란？】',
+        '【튜토리얼　【이노센트】를　찾아라！】',
+        '좋은　주민은　【이노센트】라고　불려．',
+    )
+    tutorial_missing = [s for s in tutorial_expected if s not in talk_texts]
+    tutorial_ascii = [s for s in talk_texts if '튜토리얼' in s and ('[' in s or ']' in s)]
+    print(f'  튜토리얼 괄호 회귀검사: 누락 {len(tutorial_missing)} / ASCII 괄호 {len(tutorial_ascii)}')
+    if tutorial_missing or tutorial_ascii:
+        ok = False
+        for s in tutorial_missing:
+            print(f'    !! 정상 문구 누락: {s}')
+        for s in tutorial_ascii[:3]:
+            print(f'    !! ASCII 괄호 잔존: {s}')
     # 오프셋 정합성: 마지막 레코드가 파일 끝 근처를 가리키는지
     info = talkfile.parse(t['data'])
     last = info['table_end'] + info['offs'][-1]
