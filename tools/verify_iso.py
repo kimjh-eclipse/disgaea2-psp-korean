@@ -86,6 +86,15 @@ def main():
     eboot_enc, eboot_lba, eboot_size = read_iso_file(f, 24, b'EBOOT.BIN')
     from psp_prx_type1 import decrypt_prx
     eboot_dec = decrypt_prx(eboot_enc)
+    from patch_class_description_effect import patch as verify_class_effect
+    verify_class_effect(eboot_dec, verify_only=True)
+    from patch_class_title_width import patch as verify_title_width
+    verify_title_width(eboot_dec, verify_only=True)
+    from patch_ascii_space import patch as verify_spaces
+    verify_spaces(eboot_dec, verify_only=True)
+    print('공통 ASCII 공백: 15px -> 7px / 비공백 글리프 변경 없음 OK')
+    print('직업 상세 제목: 원래 글자 크기 1.0 / 시작 X 47,133 복원 OK')
+    print('직업 설명문: 본문 유지 / 밝은 외곽선 복원 / 좌우 폭 1px OK')
     aptitude_jp = ('どうしようもないクズ', 'おちこぼれ', '平凡', '優秀', '極めて優秀', '天才')
     aptitude_ko = ('답 없는 쓰레기', '낙오자', '평범', '우수', '극히 우수', '천재')
     eboot_left = [s for s in aptitude_jp if s.encode('cp932') in eboot_dec]

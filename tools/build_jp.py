@@ -33,7 +33,7 @@ def fixed_cell_text(text):
 
 
 def patch_eboot_aptitude_names(blob):
-    """캐릭터 생성 화면이 직접 참조하는 EBOOT 내 소질명 5단계를 번역한다.
+    """캐릭터 생성 화면이 직접 참조하는 EBOOT 내 소질명 6단계를 번역한다.
 
     각 항목은 이름 22바이트 + 수치 4바이트의 0x1A바이트 레코드다.
     script00에도 같은 문구가 있지만 이 선택 화면은 그 복제본을 사용하지 않는다.
@@ -49,6 +49,9 @@ def patch_eboot_aptitude_names(blob):
     out = bytearray(blob)
     anchor = names[0][0].encode('cp932')
     base = bytes(out).find(anchor)
+    if base < 0:
+        anchor = krtext.encode(names[0][1]) + bytes(22 - len(krtext.encode(names[0][1])))
+        base = bytes(out).find(anchor)
     if base < 0 or bytes(out).find(anchor, base + 1) >= 0:
         raise SystemExit('EBOOT 소질명 배열 기준 위치 불일치')
     starts = []
@@ -56,7 +59,7 @@ def patch_eboot_aptitude_names(blob):
         old_raw = old.encode('cp932')
         at = base + index * 0x1a
         field = bytes(out[at:at + 22]).split(b'\0', 1)[0]
-        if field != old_raw:
+        if field not in (old_raw, krtext.encode(new)):
             raise SystemExit(f'EBOOT 소질명 레코드 불일치: {old!r} @ {at:#x}')
         new_raw = krtext.encode(new)
         if len(new_raw) > 22:
@@ -258,6 +261,12 @@ def main(make_iso=False):
         eb=open(ebp,'rb').read()
         assert eb[:4]==b'ELF', 'EBOOT_KR.BIN 이 ELF 가 아니다'
         eb, aptitude_names, aptitude_offsets = patch_eboot_aptitude_names(eb)
+        from patch_class_description_effect import patch as patch_class_effect
+        eb = patch_class_effect(eb)
+        from patch_class_title_width import patch as patch_title_width
+        eb = patch_title_width(eb)
+        from patch_ascii_space import patch as patch_spaces
+        eb = patch_spaces(eb)
         print('EBOOT 소질명: ' + ', '.join(new for _old,new in aptitude_names))
         print('EBOOT 소질명 위치: ' + ', '.join(f'{x:#x}' for x in aptitude_offsets))
         from psp_prx_type1 import encrypt_prx, decrypt_prx

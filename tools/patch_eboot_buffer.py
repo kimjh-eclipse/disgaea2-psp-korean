@@ -65,6 +65,17 @@ ADVANCE_PATCHES = {
 }
 PATCHES.update(ADVANCE_PATCHES)
 
+# ASCII space has a separate fast path; use the existing scaled 7px advance
+# instead of f22 (15px). Non-space glyph geometry and advance are untouched.
+ASCII_SPACE_PATCHES = {
+    0x088A8C04: (0x44950000, 0x8FA201C0),  # lw v0,0x1c0(sp)
+    0x088A8C08: (0x46800020, 0x02A2A821),  # addu s5,s5,v0
+    0x088A8C0C: (0x46160000, 0x00000000),
+    0x088A8C10: (0x4600000D, 0x00000000),
+    0x088A8C18: (0x44150000, 0x00000000),
+}
+PATCHES.update(ASCII_SPACE_PATCHES)
+
 
 def load_segment(data):
     if data[:4] != b"\x7fELF":

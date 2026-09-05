@@ -25,7 +25,7 @@ using System.Windows.Forms;
 //   rangeCount x { u64 offset, u32 length, length bytes }
 internal static class D2IsoQuickPatch
 {
-    private const string VersionText = "v20260904";
+    private const string VersionText = "v20260905";
     private const string PatchResourceName = "D2_ISO_ranges.bin";
     private const string SaveMapName = "D2_SAVE_codemap.bin";
     private const string SaveMapMagic = "D2SAVMAP1";
